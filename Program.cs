@@ -444,6 +444,42 @@ namespace AlexThomasBlackJackProject2026
             // player not found in CSV at all = new player = no bonus applicable
             return currentBalance;
         }   // closes CheckDailyBonus
+            // METHOD: DetermineWinner
+            // takes the player's final total and the dealer's final total = returns the result as a plain string: "Win", "Loss", or "Tie"
+            // extracted from Main () so the logic all lives in one place = DRY principle 
+
+        // Win/Loss Changes = only need to be changed once here 
+
+        // Order Matters: most specific cases come first so that they aren't missed by more general conditions being placed at the start 
+
+        static string DetermineWinner(int playerTotal, int dealerTotal)
+        {
+            if (playerTotal > 21 && dealerTotal > 21) return "Tie";
+            // both bust = tie - most specific case, must come first
+            // if this wasn't first, the general bust checks below would catch it incorrectly
+
+            if (playerTotal == 21) return "Win";
+            // player hit exactly 21 - Blackjack
+
+            if (dealerTotal == 21) return "Loss";
+            // dealer hit exactly 21 - dealer Blackjack
+
+            if (playerTotal > 21) return "Loss";
+            // player busted
+
+            if (dealerTotal > 21) return "Win";
+            // dealer busted
+
+            if (playerTotal > dealerTotal) return "Win";
+            // neither busted, player has higher total
+
+            if (dealerTotal > playerTotal) return "Loss";
+            // neither busted, dealer has higher total
+
+            return "Tie";
+            // final case = no condition needed = only possibility left is equal totals
+        }   // closes DetermineWinner
+
 
         // METHOD: WriteRecordToCSV
         static void WriteRecordToCSV(SessionRecord record, string csvPath)
@@ -999,10 +1035,7 @@ namespace AlexThomasBlackJackProject2026
                         string playerCard = Draw(deck);
                         string playerSuit = SuitAssigner();
 
-                        // if/else chain assigns a point value to the drawn card
-                        // C# checks top to bottom and stops at the first match
-
-
+                   
                         // REMOVED: If/Else Chain
 
                         // cardValues[playerCard] looks up the point value in one line
@@ -1160,20 +1193,13 @@ namespace AlexThomasBlackJackProject2026
                             // dealerTotal is now either 17-21 (stood) or 22+ (bust)
                             // result determination below handles both cases correctly
                         }
-                        // determine result - ordered most specific to most general
-                        // order matters: a general condition placed first would swallow
-                        // cases meant for a specific one below it
-                        string result = "";
-                        if (playerTotal > 21 && dealerTotal > 21) result = "Tie";
-                        else if (playerTotal == 21) result = "Win";
-                        else if (dealerTotal == 21) result = "Loss";
-                        else if (playerTotal > 21) result = "Loss";
-                        else if (dealerTotal > 21) result = "Win";
-                        else if (playerTotal > dealerTotal) result = "Win";
-                        else if (dealerTotal > playerTotal) result = "Loss";
-                        else result = "Tie";
-                        // final else = no condition = catches everything remaining
-                        // the only case left at this point is equal totals = Tie
+
+                        // REMOVED: If/Else Chain 
+
+                        // DetermineWinner() extracts the result logic into its own method
+                        // takes both totals, returns "Win", "Loss", or "Tie"
+                        // the logic itself lives in the method above Main()
+                        string result = DetermineWinner(playerTotal, dealerTotal);
 
                         Console.ForegroundColor = ConsoleColor.White;
                         Console.WriteLine("\n" + player.FirstName + " " + player.LastName + "'s total: " + playerTotal);
