@@ -113,6 +113,18 @@ namespace AlexThomasBlackJackProject2026
 
     class BlackjackGame // this type of class is only accessible within this file/namespace (default = "internal")
     {
+
+        // Single shared Random instance for the entire class; declared at class level = all methods share it 
+        // ***** BUG RISK ***** 
+        // if two calls of the draw method happen close together in time, they can get the same seed and produce the same card twice in a row
+        // one shared instance eliminates that problem entirely
+
+        static Random rand = new Random();
+
+
+
+
+
         // methods live here - draw (), SuitAssigner(), Main(), etc. 
 
         // SuitAssigner = method 
@@ -131,11 +143,10 @@ namespace AlexThomasBlackJackProject2026
             List<string> suits = new List<string>() // () = initializer - a shortcut that lets you fill the list with values at the same moment you create it (rather than calling .Add() four times)
                 { "Hearts", "Diamonds", "Clubs", "Spades" };
 
-            Random rand = new Random();
 
-            // creates a random number generator 
-            // Random = a class from using System
-            // You create an instance of Random with new and then call methods on that instance to get numbers
+            // REMOVED: Random Number Generator 
+            // rand is the shared class-level Random instance declared at the top of BlackjackGame
+            // removing the local new Random() here prevents the seed collision bug
 
             return suits[rand.Next(0, suits.Count)];
 
@@ -180,8 +191,9 @@ namespace AlexThomasBlackJackProject2026
         // Lists = dynamic 
 
         {
-            Random rand = new Random();
-
+            //REMOVED: RANDOM NUMBER GENERATOR
+            // rand is the shared class-level Random instance declared at the top of BlackjackGame
+       
             // deck.Length = number of cards in the array; you use .Length for an array but .Count for a list - they do the same thing but the property name differs
             // int pick = declares a variable of type int to store the random index - storing it in a named variable (pick) before using it makes the code easier to read and debug; you could also print pick if you wanted to see what index was chosen.
             int pick = rand.Next(deck.Length); // randomly picks an index number from the deck and assigns it to the int variable pick
