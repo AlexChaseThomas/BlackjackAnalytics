@@ -121,8 +121,21 @@ namespace AlexThomasBlackJackProject2026
 
         static Random rand = new Random();
 
+        // DICTIONARY: cardValues = maps each card name to its point value 
 
+        // REPLACES: if/else chains that appeared three (3) times in Phase 1
 
+        // Dictionary<string, int> = key is the card name (string), value is the pont worth (int)
+        // Similar to VLOOKUP in Excel or a JOIN in SQL 
+        // give it a key ("Ace"), get back a value (11) instantly
+
+        static Dictionary<string, int> cardValues = new Dictionary<string, int>()
+        {
+            { "Ace",   11 }, { "King",  10 }, { "Queen", 10 }, { "Jack", 10 },
+            { "10",    10 }, { "9",      9 }, { "8",      8 }, { "7",     7 },
+            { "6",      6 }, { "5",      5 }, { "4",      4 }, { "3",     3 },
+            { "2",      2 }
+        };
 
 
         // methods live here - draw (), SuitAssigner(), Main(), etc. 
@@ -753,9 +766,13 @@ namespace AlexThomasBlackJackProject2026
                 bool overrodeSuggestion = false;
                 int playerAces = 0;
 
+                // overrodeSuggestion declared here so it is accessible both in the draw branch where it gets set
+                // AND outside the draw branch where it gets written to the SessionRecord
+
                 // playerAces tracks how many Aces in the player's hand are currently counted as 11
                 // used for soft Ace handling - if the player draws and busts but has a soft Ace,
                 // the Ace drops from 11 to 1 instead of causing an immediate bust
+
 
                 // DEALER STARTING HAND
                 // dealer receives one visible card immediately at the start of the hand
@@ -765,25 +782,13 @@ namespace AlexThomasBlackJackProject2026
                 string dealerVisibleCard = Draw(deck);
                 string dealerVisibleSuit = SuitAssigner();
 
-                int dealerVisibleValue = 0;
+                // REMOVED: IF/ELSE CHAIN = Dictionary lookup replaces the 13-line if/else chain
+                // cardValues["King"] returns 10 instantly - same as the chain did but in one line
 
-                if (dealerVisibleCard == "Ace") dealerVisibleValue = 11;
-                else if (dealerVisibleCard == "King") dealerVisibleValue = 10;
-                else if (dealerVisibleCard == "Queen") dealerVisibleValue = 10;
-                else if (dealerVisibleCard == "Jack") dealerVisibleValue = 10;
-                else if (dealerVisibleCard == "10") dealerVisibleValue = 10;
-                else if (dealerVisibleCard == "9") dealerVisibleValue = 9;
-                else if (dealerVisibleCard == "8") dealerVisibleValue = 8;
-                else if (dealerVisibleCard == "7") dealerVisibleValue = 7;
-                else if (dealerVisibleCard == "6") dealerVisibleValue = 6;
-                else if (dealerVisibleCard == "5") dealerVisibleValue = 5;
-                else if (dealerVisibleCard == "4") dealerVisibleValue = 4;
-                else if (dealerVisibleCard == "3") dealerVisibleValue = 3;
-                else if (dealerVisibleCard == "2") dealerVisibleValue = 2;
-
+                int dealerVisibleValue = cardValues[dealerVisibleCard];
                 dealerTotal = dealerVisibleValue;
-                // overrodeSuggestion declared here so it is accessible both in the draw branch where it gets set
-                // AND outside the draw branch where it gets written to the SessionRecord
+
+               
 
                 stats.TotalGames++;
 
@@ -838,7 +843,11 @@ namespace AlexThomasBlackJackProject2026
                 // game header box
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine("╔══════════════════════════════════════╗");
-                Console.WriteLine($"║  GAME #{stats.TotalGames,-3}                          ║");
+                Console.WriteLine("║  GAME #" + stats.TotalGames.ToString().PadRight(30) + "║");
+                // RESOLVED BORDER MISALIGNMENT
+                // PadRight(30) pads the game number string with spaces on the right until it is 30 characters total
+                // Then, || game # is 8 characters + 30 = 38 characters total between the borders (length of top line = 38)
+
                 Console.WriteLine("╠══════════════════════════════════════╣");
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("║  [ENTER] Draw a Card                 ║");
@@ -993,22 +1002,15 @@ namespace AlexThomasBlackJackProject2026
                         // if/else chain assigns a point value to the drawn card
                         // C# checks top to bottom and stops at the first match
 
-                        // ***** Phase 2 replaces this entire block with one Dictionary lookup line *****
-                        int playerCardValue = 0;
-                        if (playerCard == "Ace") playerCardValue = 11;
-                        else if (playerCard == "King") playerCardValue = 10;
-                        else if (playerCard == "Queen") playerCardValue = 10;
-                        else if (playerCard == "Jack") playerCardValue = 10;
-                        else if (playerCard == "10") playerCardValue = 10;
-                        else if (playerCard == "9") playerCardValue = 9;
-                        else if (playerCard == "8") playerCardValue = 8;
-                        else if (playerCard == "7") playerCardValue = 7;
-                        else if (playerCard == "6") playerCardValue = 6;
-                        else if (playerCard == "5") playerCardValue = 5;
-                        else if (playerCard == "4") playerCardValue = 4;
-                        else if (playerCard == "3") playerCardValue = 3;
-                        else if (playerCard == "2") playerCardValue = 2;
 
+                        // REMOVED: If/Else Chain
+
+                        // cardValues[playerCard] looks up the point value in one line
+                        // the Dictionary was declared at the top of BlackjackGame
+                        int playerCardValue = cardValues[playerCard];
+
+                        // track Aces separately for soft Ace handling
+                        // Ace is always added as 11 first, then dropped to 1 if needed
                         if (playerCard == "Ace") playerAces++;
 
 
@@ -1120,20 +1122,12 @@ namespace AlexThomasBlackJackProject2026
                                 string dealerCard = Draw(deck);
                                 string dealerSuit = SuitAssigner();
 
-                                int dealerCardValue = 0;
-                                if (dealerCard == "Ace") dealerCardValue = 11;
-                                else if (dealerCard == "King") dealerCardValue = 10;
-                                else if (dealerCard == "Queen") dealerCardValue = 10;
-                                else if (dealerCard == "Jack") dealerCardValue = 10;
-                                else if (dealerCard == "10") dealerCardValue = 10;
-                                else if (dealerCard == "9") dealerCardValue = 9;
-                                else if (dealerCard == "8") dealerCardValue = 8;
-                                else if (dealerCard == "7") dealerCardValue = 7;
-                                else if (dealerCard == "6") dealerCardValue = 6;
-                                else if (dealerCard == "5") dealerCardValue = 5;
-                                else if (dealerCard == "4") dealerCardValue = 4;
-                                else if (dealerCard == "3") dealerCardValue = 3;
-                                else if (dealerCard == "2") dealerCardValue = 2;
+
+
+                                // REMOVED: If/Else Chain
+
+                                // Dictionary lookup - same pattern as player draw above
+                                int dealerCardValue = cardValues[dealerCard];
 
                                 // if this card is an Ace, count it as 11 for now
                                 // and track that we have another Ace counted as 11
