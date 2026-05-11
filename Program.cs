@@ -518,6 +518,15 @@ namespace AlexThomasBlackJackProject2026
                 player.Username = Console.ReadLine().Trim().ToLower();
             }
 
+            // NOTE: username uniqueness is not enforced in Phase 2 (CSV version)
+            // two players could theoretically register the same username
+            // this will be fixed in Component 2 when SQLite is integrated
+            // the Players table will have a UNIQUE constraint on the Username column
+            // which means the database itself will reject duplicate usernames at the INSERT level
+            // for now the CSV version operates on trust - whoever types a username gets that balance
+
+
+
             // STEP 3 = AGE VERIFICATION
             // player enters their full date of birth for verification purposes only
             // the DOB is used to calculate their exact age, then immediately discarded
@@ -735,9 +744,63 @@ namespace AlexThomasBlackJackProject2026
                 // overrodeSuggestion declared here so it is accessible both in the draw branch where it gets set
                 // AND outside the draw branch where it gets written to the SessionRecord
 
-                // playerAces tracks how many Aces in the player's hand are currently counted as 11
+                /// playerAces tracks how many Aces in the player's hand are currently counted as 11
                 // used for soft Ace handling - if the player draws and busts but has a soft Ace,
                 // the Ace drops from 11 to 1 instead of causing an immediate bust
+
+                stats.TotalGames++;
+                // incremented here so the game number is correct from the first hand
+
+                // BETTING PROMPT = player must bet BEFORE seeing their cards
+                // minimum of 5 tokens, maximum of 100 tokens, cannot exceed their balance
+                int currentBet = 0;
+                bool validBet = false;
+
+                while (!validBet)
+                {
+                    Console.ForegroundColor = ConsoleColor.Magenta;
+                    Console.WriteLine("Tokens: " + tokenBalance);
+                    Console.Write("Place your bet (min 5, max " + Math.Min(100, tokenBalance) + "): ");
+                    Console.ResetColor();
+
+                    string betInput = Console.ReadLine().Trim();
+
+                    // allow the player to type "exit" to leave instead of placing a bet
+                    // true ESC during ReadLine() isn't possible in a console app without
+                    // switching to ReadKey - this is the simplest workaround for now
+                    // Component 2 will replace ReadLine betting with a proper ReadKey flow
+                    if (betInput.ToLower() == "exit")
+                    {
+                        sessionActive = false;
+                        break;
+                        // break exits the betting while loop
+                        // sessionActive = false exits the session loop on the next iteration
+                    }
+
+                    if (!int.TryParse(betInput, out currentBet))
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Please enter a whole number.");
+                        Console.ResetColor();
+                        continue;
+                    }
+
+                    int maxBet = Math.Min(100, tokenBalance);
+
+                    if (currentBet < 5 || currentBet > maxBet)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Bet must be between 5 and " + maxBet + ".");
+                        Console.ResetColor();
+                        continue;
+                    }
+
+                    validBet = true;
+                }
+
+                int tokensBefore = tokenBalance;
+                // snapshot of the balance BEFORE this hand starts
+                // stored in SessionRecord so we can see exactly what each hand lost or gained
 
                 // DEAL OPENING HANDS
                 // in real blackjack both player and dealer receive two cards before any decisions
@@ -756,7 +819,6 @@ namespace AlexThomasBlackJackProject2026
                 int openValue1 = cardValues[openCard1];
                 int openValue2 = cardValues[openCard2];
 
-                // handle Aces in the opening hand
                 if (openCard1 == "Ace") playerAces++;
                 if (openCard2 == "Ace") playerAces++;
 
@@ -833,6 +895,25 @@ namespace AlexThomasBlackJackProject2026
                     Console.ResetColor();
                     gameOver = true;
                 }
+
+                // STRATEGY WARNING: HIGH OPENING HAND
+                // if strategy mode is on and the player's opening two cards total 17 or higher,
+                // warn them before the game loop starts - they haven't drawn yet but they should
+                // know that hitting from this total carries significant bust risk
+                // same bust percentage logic as the mid-hand warning
+
+                if (strategyOn && playerTotal >= 17 && !gameOver)
+                {
+                    string bustChance = CalculateBustChance(playerTotal);
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("⚠  Strategy tip: your opening total is " + playerTotal + ".");
+                    Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
+                    Console.ResetColor();
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine("   [ENTER] Hit anyway  [N] Stand  [D] Double Down  [ESC] Quit");
+                    Console.ResetColor();
+                }
+
 
                 numberOfDraws = 0;
                 // numberOfDraws starts at 0 AFTER the opening deal
@@ -924,6 +1005,7 @@ namespace AlexThomasBlackJackProject2026
                             forfeitRecord.TokensAfter = tokenBalance;
                             forfeitRecord.StrategyMode = strategyOn ? "On" : "Off";
                             forfeitRecord.OverrodeSuggestion = overrodeSuggestion;
+                            forfeitRecord.DoubledDown = doubledDown;
 
                             WriteRecordToCSV(forfeitRecord, csvPath);
 
@@ -1130,13 +1212,19 @@ namespace AlexThomasBlackJackProject2026
                             // counted as 11, it drops to 1 instead (subtract 10 from total)
                             // example: Ace + Ace = 11 + 11 = 22, drops to 11 + 1 = 12, keeps drawing
                             // example: Ace + 6 = 17, stands (soft 17 rule - stands on all 17s here)
-                            int dealerAces = 0;
 
-                            // check if the dealer's visible starting card was an Ace
-                            // if so it was already counted as 11 so we need to track it
-                            if (dealerVisibleCard == "Ace") dealerAces = 1;
-                            // dealerVisibleCard is set at the top of the session loop
-                            // dealerTotal was already set to dealerVisibleValue before the game loop
+                            // dealerAcesStart was calculated when the opening hands were dealt
+                            // it already accounts for both the visible card and the hole card
+                            // we use it as the starting Ace count for the dealer draw phase
+                            int dealerAces = dealerAcesStart;
+
+                            // reveal the hole card now that the player's turn is over
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard +
+                                              " of " + dealerHoleSuit);
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                            Console.ResetColor();
 
                             while (dealerTotal < 17)
                             {
@@ -1276,6 +1364,9 @@ namespace AlexThomasBlackJackProject2026
                         // ternary - writes "On" or "Off" as readable string in the CSV
                         record.OverrodeSuggestion = overrodeSuggestion;
                         // true if a warning was shown and acknowledged this hand
+                        record.DoubledDown = doubledDown;
+                        // true if the player doubled down this hand
+                        // false for all normal hands
 
                         WriteRecordToCSV(record, csvPath);
 
@@ -1292,19 +1383,9 @@ namespace AlexThomasBlackJackProject2026
                         {
                             Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.WriteLine("─────────────────────────────────────");
-                            Console.WriteLine("Place a bet to play again, or press ESC to exit.");
+                            Console.WriteLine("Type your bet to continue, or type 'exit' to quit.");
                             Console.ResetColor();
-
-                            // peek at the next keypress before entering the betting loop
-                            // if they press Escape we exit cleanly without asking for a bet
-                            // if they press anything else we fall into the betting loop naturally
-                            ConsoleKeyInfo peek = Console.ReadKey(true);
-                            if (peek.Key == ConsoleKey.Escape)
-                                sessionActive = false;
-                            // sessionActive = false exits the outer session loop
-                            // no bet prompt shown - session ends cleanly
                         }
-
                     }   // closes if (gameOver && sessionActive)
 
                 }   // closes inner game loop (while !gameOver)
