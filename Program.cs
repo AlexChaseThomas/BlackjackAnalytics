@@ -51,13 +51,16 @@ namespace AlexThomasBlackJackProject2026
      
      */
 
-    // PlayerInfo is a data class, it stores who the person is - it gets filled in once at the start of the session when the user enters their name and DOB, then the program references it throughout
+    // PlayerInfo = a data class that stores who the player is 
 
-    public class PlayerInfo // public class = accessible from anywhere 
+    // Phase 2: redesigned PlayerInfo to remove PII security risk 
+    // username system replaces first/last name; username acts as a primary key in the database, linking all session records
+    // BirthYear removed entirely - DOB is entered for verification only and immediately discarded
+    // only the calculated age integer is kept, stored separately as playerAge in Main()
+    public class PlayerInfo
     {
-        public string FirstName; // user's first name
-        public string LastName; // user's last name
-        public DateTime DateOfBirth; // user's date of birth
+        public string Username; // unique identifier chosen by the player
+        // no DOB, no real name - no PII stored anywhere in this class
     }
 
     // SessionRecord is a data class that stores what happened during a hand - it gets created fresh at the end of every single hand, filled in with that hand's results, written to the CSV, and then thrown away. Next hand, a new one is created
@@ -65,8 +68,8 @@ namespace AlexThomasBlackJackProject2026
     {
         // basic session information fields
         public int SessionID;
-        public string Name;
-        public int PlayerAge;
+        public string Username;   // replaces Name - matches the new identity system
+        public int PlayerAge;  // calculated age only - full DOB is never stored
         public string LoginTime;
         public int GameNumber;
         public int PlayerTotal;
@@ -81,6 +84,7 @@ namespace AlexThomasBlackJackProject2026
         public int BetAmount;    // how much the player wagered this hand 
         public int TokensBefore; // balance before the bet was placed 
         public int TokensAfter;  // balance after the hand resolved 
+        public bool DoubledDown; // true if the player used double down this hand - tracked for analytics (i.e. did doubling down correlate with winning or losing?
 
         // strategy fields - added for basic strategy analytics 
         // StrategyMode = records whether suggestions were on or off for this hand 
@@ -113,22 +117,17 @@ namespace AlexThomasBlackJackProject2026
 
     class BlackjackGame // this type of class is only accessible within this file/namespace (default = "internal")
     {
-
         // Single shared Random instance for the entire class; declared at class level = all methods share it 
         // ***** BUG RISK ***** 
         // if two calls of the draw method happen close together in time, they can get the same seed and produce the same card twice in a row
         // one shared instance eliminates that problem entirely
-
         static Random rand = new Random();
 
         // DICTIONARY: cardValues = maps each card name to its point value 
-
         // REPLACES: if/else chains that appeared three (3) times in Phase 1
-
-        // Dictionary<string, int> = key is the card name (string), value is the pont worth (int)
+        // Dictionary<string, int> = key is the card name (string), value is the point worth (int)
         // Similar to VLOOKUP in Excel or a JOIN in SQL 
         // give it a key ("Ace"), get back a value (11) instantly
-
         static Dictionary<string, int> cardValues = new Dictionary<string, int>()
         {
             { "Ace",   11 }, { "King",  10 }, { "Queen", 10 }, { "Jack", 10 },
@@ -136,7 +135,6 @@ namespace AlexThomasBlackJackProject2026
             { "6",      6 }, { "5",      5 }, { "4",      4 }, { "3",     3 },
             { "2",      2 }
         };
-
 
         // methods live here - draw (), SuitAssigner(), Main(), etc. 
 
@@ -155,7 +153,6 @@ namespace AlexThomasBlackJackProject2026
             // List <string> is a generic type parameter - it's how you tell the List what kind of items (data type) it will hold. 
             List<string> suits = new List<string>() // () = initializer - a shortcut that lets you fill the list with values at the same moment you create it (rather than calling .Add() four times)
                 { "Hearts", "Diamonds", "Clubs", "Spades" };
-
 
             // REMOVED: Random Number Generator 
             // rand is the shared class-level Random instance declared at the top of BlackjackGame
@@ -204,73 +201,23 @@ namespace AlexThomasBlackJackProject2026
         // Lists = dynamic 
 
         {
-            //REMOVED: RANDOM NUMBER GENERATOR
+            // REMOVED: RANDOM NUMBER GENERATOR
             // rand is the shared class-level Random instance declared at the top of BlackjackGame
-       
+
             // deck.Length = number of cards in the array; you use .Length for an array but .Count for a list - they do the same thing but the property name differs
             // int pick = declares a variable of type int to store the random index - storing it in a named variable (pick) before using it makes the code easier to read and debug; you could also print pick if you wanted to see what index was chosen.
             int pick = rand.Next(deck.Length); // randomly picks an index number from the deck and assigns it to the int variable pick
             return deck[pick]; // retrieves the card name at the assigned index
         }   // closes Draw
 
-        // METHOD: PasswordChecker
-        // this method takes one string parameter called input and returns a bool (true or false) 
-        // the expression input == "Password" is a comparison. == checks equality / compares two values. = assigns a value 
-        // the password needs to be an exact match; meaning that the letter case matters
-        static bool PasswordChecker(string input)
-        {
-            return input == "Password";
-        }   // closes PasswordChecker
+        // REMOVED: PasswordChecker
+        // removed in Phase 2 - password was visible in source code and provided no real security
+        // username system replaces it as the program entry point
 
-        // static is required here for the same reasons as the other methods - the runtime calls Main first without creating an instance of BlackjackGame yet
-        // void means this method doesn't return anything - it is just a procedure 
-
-        // METHOD: CalculateAge takes a date of birth and returns the person's current age as an int 
-        // static = belongs to the class, no object needed to call it 
-        // int before the name = this method returns a whole number 
-        static int CalculateAge(DateTime dateOfBirth)
-        {
-            int age = DateTime.Today.Year - dateOfBirth.Year;
-
-            // DateTime.Today = today's date with no time component 
-            // .Year .Month .Day are properties on any DateTime object - they pull out individual pieces of data as plain integers
-
-            // NOTE: the subtraction above is sometimes off by one (e.g. if the user's birthday has not happened yet this calendar year - they haven't actually turned that age yet)
-            // example: today is May 5 2026, birthday is December 1 2005
-            // 2026 - 2005 = 21, but they are actually still 20
-            // this corrects it by subtracting 1 if the birthday is later in the year
-
-            if (dateOfBirth.Month > DateTime.Today.Month || dateOfBirth.Month == DateTime.Today.Month && dateOfBirth.Day > DateTime.Today.Day)
-
-            // says: if the user's birth month hasn't happened yet this calendar year
-            // OR if we are currently IN their birth month but their actual birthday
-            // hasn't occurred yet this month - then in either case, they haven't 
-            // actually turned the age we calculated yet, so subtract 1 to correct it.
-
-            // example 1: today is May 5 2026, birthday is August 1 2001
-            // dateOfBirth.Month (8) > DateTime.Today.Month (5) = true
-            // first condition alone makes the whole if true - age gets corrected
-
-            // example 2: today is May 5 2026, birthday is May 20 2001
-            // dateOfBirth.Month (5) > DateTime.Today.Month (5) = false - same month
-            // so we check the second condition:
-            // dateOfBirth.Month (5) == DateTime.Today.Month (5) = true
-            // AND dateOfBirth.Day (20) > DateTime.Today.Day (5) = true
-            // birthday is later this month so age gets corrected
-
-            // example 3: today is May 5 2026, birthday is March 1 2001
-            // dateOfBirth.Month (3) > DateTime.Today.Month (5) = false
-            // birthday already passed this year - no correction needed, if block skipped
-
-            // the || means OR - only ONE side needs to be true for the block to run
-            // the && means AND - BOTH sides must be true for that condition to count
-            // && is evaluated before || - so the right side is read as one complete thought
-            {
-                age--; // subtracts 1, the mirror image of ++ which adds 1
-            }
-
-            return age;
-        }   // closes CalculateAge
+        // REMOVED: CalculateAge method
+        // removed in Phase 2 - age calculation is now done inline in Step 3 of Main()
+        // the DOB is entered, age is calculated, DOB is immediately discarded
+        // only playerAge (an integer) survives - no PII stored anywhere
 
         // METHOD: CalculateBustChance = takes the player's current total, returns bust probability as a string 
         // Used by the strategy warning system to demonstrate informed risk to the player
@@ -315,8 +262,9 @@ namespace AlexThomasBlackJackProject2026
         // METHOD: LoadPlayerBalance
         // reads the CSV to find the last recorded token balance for this player
         // new players or first run ever returns 100 as the starting balance
-        // this is how balance persists across sessions without a database 
-        static int LoadPlayerBalance(string playerName, string csvPath)
+        // this is how balance persists across sessions without a database
+        // NOTE: column indexes - Username=1, PlayerAge=2, LoginTime=3, TokensAfter=13
+        static int LoadPlayerBalance(string username, string csvPath)
         {
             // if the CSV doesn't exist yet = this is a brand new, first run 
             if (!File.Exists(csvPath))
@@ -339,8 +287,8 @@ namespace AlexThomasBlackJackProject2026
                 // splits wherever it finds a comma - same structure as the row that we wrote
                 string[] fields = lines[i].Split(',');
 
-                // fields[1] = Name column (second column, index 1)
-                if (fields[1] == playerName)
+                // fields[1] = Username column (second column, index 1)
+                if (fields[1] == username)
                 {
                     // fields[13] = TokensAfter column (14th column, index 13)
                     // int.TryParse safely converts the string to an int 
@@ -349,14 +297,13 @@ namespace AlexThomasBlackJackProject2026
                 }
             }
 
-            // player name not found anywhere in the file - brand new player 
-            // i.e. if you run out of tokens, you can just change your name and it will create a new instance of you as a new player, even if you already have the csv
+            // username not found anywhere in the file = brand new player
             return 100;
         }   // closes LoadPlayerBalance
 
         // METHOD: CheckDailyBonus
         // The CSV already records LoginTime for every row. To check if 24 hours have passed, we read the player's most recent LoginTime from the CSV and compare it to right now. If the difference is 24 hours or more, they get the bonus.
-        static int CheckDailyBonus(string playerName, string csvPath, int currentBalance, out double hoursUntilBonus)
+        static int CheckDailyBonus(string username, string csvPath, int currentBalance, out double hoursUntilBonus)
         // 'out double hoursUntilBonus' = an output parameter
         // out = the method writes a value directly into this variable from the outside
         // same 'out' concept you already know from int.TryParse and DateTime.TryParse
@@ -385,10 +332,11 @@ namespace AlexThomasBlackJackProject2026
             {
                 string[] fields = lines[i].Split(',');
 
-                // fields[1] = Name column - check this row belongs to our player first
-                if (fields[1] == playerName)
+                // fields[1] = Username column - check this row belongs to our player first
+                if (fields[1] == username)
                 {
-                    // fields[3] = LoginTime column (fourth column, index 3) 
+                    // fields[3] = LoginTime column (fourth column, index 3)
+                    // Username=1, PlayerAge=2, LoginTime=3 - same indexes as before
                     // DateTime.TryParse converts the stored string back into a DateTime
                     // same pattern as DOB validation 
                     if (DateTime.TryParse(fields[3], out DateTime lastLogin))
@@ -444,14 +392,12 @@ namespace AlexThomasBlackJackProject2026
             // player not found in CSV at all = new player = no bonus applicable
             return currentBalance;
         }   // closes CheckDailyBonus
-            // METHOD: DetermineWinner
-            // takes the player's final total and the dealer's final total = returns the result as a plain string: "Win", "Loss", or "Tie"
-            // extracted from Main () so the logic all lives in one place = DRY principle 
 
+        // METHOD: DetermineWinner
+        // takes the player's final total and the dealer's final total = returns the result as a plain string: "Win", "Loss", or "Tie"
+        // extracted from Main() so the logic all lives in one place = DRY principle 
         // Win/Loss Changes = only need to be changed once here 
-
         // Order Matters: most specific cases come first so that they aren't missed by more general conditions being placed at the start 
-
         static string DetermineWinner(int playerTotal, int dealerTotal)
         {
             if (playerTotal > 21 && dealerTotal > 21) return "Tie";
@@ -480,7 +426,6 @@ namespace AlexThomasBlackJackProject2026
             // final case = no condition needed = only possibility left is equal totals
         }   // closes DetermineWinner
 
-
         // METHOD: WriteRecordToCSV
         static void WriteRecordToCSV(SessionRecord record, string csvPath)
         {
@@ -499,11 +444,11 @@ namespace AlexThomasBlackJackProject2026
                 // after that fileExists = true and this is skipped forever
                 {
                     writer.WriteLine(
-                        "SessionID,Name,PlayerAge,LoginTime," +
+                        "SessionID,Username,PlayerAge,LoginTime," +
                         "GameNumber,PlayerTotal,DealerTotal," +
                         "Result,PlayerBusted,DealerBusted,NumberOfDraws," +
                         "BetAmount,TokensBefore,TokensAfter," +
-                        "StrategyMode,OverrodeSuggestion"
+                        "StrategyMode,OverrodeSuggestion,DoubledDown"
                     // ***** order must match the data row below - EXACTLY *****
                     );
                 }
@@ -513,7 +458,7 @@ namespace AlexThomasBlackJackProject2026
                 // this is all a CSV file is - plain text with commas between values
                 writer.WriteLine(
                     record.SessionID + "," +
-                    record.Name + "," +
+                    record.Username + "," +
                     record.PlayerAge + "," +
                     record.LoginTime + "," +
                     record.GameNumber + "," +
@@ -527,15 +472,17 @@ namespace AlexThomasBlackJackProject2026
                     record.TokensBefore + "," +
                     record.TokensAfter + "," +
                     record.StrategyMode + "," +
-                    record.OverrodeSuggestion
+                    record.OverrodeSuggestion + "," +
+                    record.DoubledDown
                 );
             }   // StreamWriter closes and saves automatically here
         }   // closes WriteRecordToCSV
 
         static void Main() // This is the entry point of every C# program, when you run your program, C# scans your code looking specifically for a method called Main (C# STARTS EXECUTING HERE)
         {
-            // STEP 1 = PASSWORD GATE
-
+            // STEP 1 = WELCOME SCREEN
+            // password gate removed in Phase 2 - password was visible in source code and provided no real security
+            // username system replaces it as the program entry point
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("╔══════════════════════════════════════╗");
             Console.WriteLine("║      C# BLACKJACK ANALYTICS          ║");
@@ -543,111 +490,115 @@ namespace AlexThomasBlackJackProject2026
             Console.WriteLine("╚══════════════════════════════════════╝");
             Console.ResetColor();
 
+            // STEP 2 = USERNAME ENTRY
+            // username is the player's unique identifier throughout the system
+            // if the username exists in the CSV = returning player, balance loaded
+            // if the username doesn't exist = new player, starts with 100 tokens
+            // no passwords collected - username alone identifies the player
+            // no real names or dates of birth stored - no PII stored anywhere
+            PlayerInfo player = new PlayerInfo();
+
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Write("Enter dealer password: ");
+            Console.Write("Enter your username: ");
             Console.ResetColor();
+            player.Username = Console.ReadLine().Trim().ToLower();
+            // .ToLower() converts the username to lowercase
+            // this means "AlexT" and "alext" are treated as the same username
+            // prevents duplicate accounts from different capitalizations
 
-            // Console.Write prints text without moving to a new line 
-
-            // In Main, we ask the user to type the password for the game and send it over to the PasswordChecker() method to compare it against the real password.
-            // PasswordChecker = boolean = comes back with either true or false 
-            // The 'if' is part of Main(), it looks at what the password checker method returned (true or false) and, if it is false, prints "Incorrect password. Exiting." and shuts down the program. 
-            // if the PasswordChecker() method used in Main() came back true, then just ignore this block and move onto the next thing. 
-
-            // PasswordChecker() does the comparison, Main() decides what to do with the result.
-
-            if (!PasswordChecker(Console.ReadLine().Trim())) // Console.ReadLine() pauses the program completely and waits for the user to type in their input and press Enter - whatever they type comes back to the program as a string 
-                                                             // PasswordChecker(Console.ReadLine().Trim()) is METHOD CHAINING - the results of Console.ReadLine
-
-            // The ! before PasswordChecker(...) means NOT 
-            // If the password check does NOT return true - meaning the password was wrong - the block runs 
-
-            // .Trim() is a method on any string that removes whitespace from the beginning and end. 
-            // DEFENSIVE PROGRAMMING = .Trim() in this instance is being used to anticipate small ways users interact unexpectedly and handling them gracefully. 
+            // username validation - must be between 3 and 20 characters
+            while (player.Username.Length < 3 || player.Username.Length > 20)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Incorrect password. Exiting.");
+                Console.WriteLine("Username must be between 3 and 20 characters. Try again.");
                 Console.ResetColor();
-                return; // return inside Main() exits the entire program
-                        // called a GUARD CLAUSE - it checks something at the top of the code, in this case, a password, and if it fails the check, it exits the program early 
-                        // If you didn't have to do this, the rest of the program would have to live inside of an 'else' block - meaning IF the first condition passed, everything after would be after an else statement 
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write("Enter your username: ");
+                Console.ResetColor();
+                player.Username = Console.ReadLine().Trim().ToLower();
             }
 
-            // STEP 2 = COLLECT PLAYER INFO
-
-            PlayerInfo player = new PlayerInfo(); // declares a variable named player of type PlayerInfo; = new PlayerInfo()
-
-            // PlayerInfo class was just a blueprint; after this line of code, player is a real object with three variables available to store data (e.g. FirstName, LastName, Age)
-
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Write("Enter your first name: ");
-            Console.ResetColor();
-            player.FirstName = Console.ReadLine().Trim();
-
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Write("Enter your last name: ");
-            Console.ResetColor();
-            player.LastName = Console.ReadLine().Trim();
-
-            // STEP 3 = DATE OF BIRTH VERIFICATION 
-
+            // STEP 3 = AGE VERIFICATION
+            // player enters their full date of birth for verification purposes only
+            // the DOB is used to calculate their exact age, then immediately discarded
+            // only the calculated age integer is stored in the session data
+            // this means the data cannot be reverse-engineered back to a specific person
+            // full DOB = PII (personally identifiable information) - we never store it
+            // age alone = not PII - cannot identify a specific individual
             bool validDate = false;
+            int playerAge = 0;
+            // playerAge stores the calculated age after verification
+            // this is what gets written to SessionRecord, not the DOB itself
 
-            // this is the flag variable that controls the while loop later 
-            // starts off as false, that way the loop starts running immediately (i.e. if the loop repeats (starts again) if someone enters an invalid DOB, in order to get the loop to start the very first time, we set it as false and it runs as if someone just entered an invalid DOB)
-            // only changes to true once we have a valid date AND the user is 21 years old 
-
-            DateTime birthDate = new DateTime();
-
-            // DateTime is a built-in C# data type that stores a complete date
-            // new DateTime() creates an empty instance that gets filled by the user input inside the while loop
-
-            while (!validDate) // while validDate is not true, keep looping until validDate flips to true 
+            while (!validDate)
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.Write("Enter your date of birth (MM/DD/YYYY): ");
+                Console.Write("(21+) Enter your date of birth (MM/DD/YYYY): ");
                 Console.ResetColor();
                 string dobInput = Console.ReadLine().Trim();
 
-                // DateTime.TryParse() tries to convert the string into a DateTime object
+                // DateTime.TryParse converts the string to a DateTime object
                 // if the user types "abc" or "13/45/2000" it won't crash - just returns false
-                // 'out birthDate' writes the converted result directly into birthDate
-
-                if (!DateTime.TryParse(dobInput, out birthDate))
+                // Phase 2: Security Update - only use player DOB to check age is over 21
+                // we no longer store the full date data, only their calculated age
+                // 'out DateTime dob' writes the result into a temporary variable
+                // we use a local variable here - NOT stored in PlayerInfo
+                // the DOB exists only for the duration of this while loop
+                if (!DateTime.TryParse(dobInput, out DateTime dob))
                 {
                     Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("Something is not right. Please remember to use MM/DD/YYYY format and try again.");
-                    Console.ResetColor();
-                    continue;
-
-                    // continue = skip everything below this line in the current pass through the loop and jump right back to the top of the while loop
-                    // the user gets asked again
-                    // DIFFERENT - if I had used break; here instead, it would have exited the loop entirely. 
-                }
-
-                // if the date was valid, we move to this point where we check the age 
-
-                int age = CalculateAge(birthDate);
-
-                // CalculateAge = method = takes the date of birth and returns the current age as an int 
-                // we pull the logic out into its own method because we need it in more than one place = DRY (DON'T REPEAT YOURSELF)
-
-                if (age < 21)
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("You must be 21 or older to play. You are " + age + ".");
+                    Console.WriteLine("Something is not right. Please use MM/DD/YYYY format and try again.");
                     Console.ResetColor();
                     continue;
                 }
 
-                // if both the DOB is entered correctly and equates to an age of greater than 21, then both checks are passed
+                // reject future dates
+                if (dob > DateTime.Today)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Date of birth cannot be in the future.");
+                    Console.ResetColor();
+                    continue;
+                }
 
-                validDate = true; // flips the while condition set at the start of the loop + exits the loop
-                player.DateOfBirth = birthDate; // stored the verified DOB in the player object 
+                // calculate exact age from the DOB
+                // same logic as the old CalculateAge method - now inline since DOB is temporary
+                playerAge = DateTime.Today.Year - dob.Year;
+                if (dob.Month > DateTime.Today.Month ||
+                    dob.Month == DateTime.Today.Month && dob.Day > DateTime.Today.Day)
+                {
+                    playerAge--;
+                    // birthday hasn't happened yet this year - subtract 1 to correct
+                }
+
+                // reject ages over 120 - almost certainly a data entry error
+                if (playerAge > 120)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Please enter a valid date of birth.");
+                    Console.ResetColor();
+                    continue;
+                }
+
+                // enforce 21+ age restriction
+                if (playerAge < 21)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("You must be 21 or older to play. You are " + playerAge + ".");
+                    Console.ResetColor();
+                    continue;
+                }
+
+                // DOB verified and age calculated
+                // validDate flips to true - loop exits
+                // dob goes out of scope here and is discarded - never stored anywhere
+                validDate = true;
             }
+            // at this point playerAge holds the verified age as a plain integer
+            // the full date of birth no longer exists anywhere in the program
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\nAge verified! Welcome, " + player.FirstName + " " + player.LastName + "!\n");
+            Console.WriteLine("\nAge verified! Welcome, " + player.Username + "!\n");
             Console.ResetColor();
 
             // STEP 4 = SESSION SETUP 
@@ -655,50 +606,35 @@ namespace AlexThomasBlackJackProject2026
             // these variables will belong to the entire session, not any one hand 
             // these variables get created once here and are referenced throughout every hand below 
 
-            // Generate a unique session ID automatically from the current timestamp
-
             // DateTime.Now = the exact current date AND time including hours, minutes, seconds
-
             // .Ticks = a property on DateTime that expresses the current moment as a very large integer 
-
             // Every tick = one ten-millionth of a second, so no two sessions ever share the same value 
             // % 1000000 = the modulo operator - gives you the remainder after dividing by 1000000
             // this trims the very large Ticks number down to a readable 6 digit number
             // example: 18374628390000000 % 1000000 = 390000 (just the last 6 digits)
-
             int sessionID = (int)(DateTime.Now.Ticks % 1000000);
 
-            // record the exact moment this session started as a formatted string 
             // DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") converts the DateTime object into text 
             // yyyy = 4 digit year, MM = 2 digit month, dd = 2 digit day 
             // HH = 24 hour clock hour, mm = minutes, ss = seconds 
             // example output: "2026-05-05 14:32:01"
-
             string loginTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
-            // build the CSV file path dynamically so it works on any computer 
-
             // AppDomain.CurrentDomain.BaseDirectory = the folder the program is currently running from 
-
             // Path.Combine() joins the folder path and filename together safely - handles the backslash between them automatically
             // ***** CSV will always appear right next to the .exe file *****
-
             string csvPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blackjack_sessions.csv");
 
             // create one GameStats instance for the whole session
             // every hand will update these counters + then they get printed at the end 
-
             GameStats stats = new GameStats();
-
-            // fullName combines first and last
-            // used in SessionRecord and LoadPlayerBalance
-            string fullName = player.FirstName + " " + player.LastName;
 
             // LoadPlayerBalance reads the CSV for this player's last recorded TokensAfter
             // if no record exists = returns 100 as starting balance
-            int tokenBalance = LoadPlayerBalance(fullName, csvPath); // sets player balance to variable tokenBalance
+            // player.Username is the identifier - same username = same player history loaded
+            int tokenBalance = LoadPlayerBalance(player.Username, csvPath);
 
-            tokenBalance = CheckDailyBonus(fullName, csvPath, tokenBalance, out double hoursUntilBonus);
+            tokenBalance = CheckDailyBonus(player.Username, csvPath, tokenBalance, out double hoursUntilBonus);
             // 'out double hoursUntilBonus' declares the variable AND receives the value in one line
             // same pattern as 'out int balance' in LoadPlayerBalance
             // after this line, hoursUntilBonus holds either 0 (bonus awarded or new player)
@@ -707,7 +643,7 @@ namespace AlexThomasBlackJackProject2026
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("Session ID           : " + sessionID);
             Console.WriteLine("Session started      : " + loginTime);
-            Console.WriteLine("GameStats saving to  : " + csvPath + "\n");
+            Console.WriteLine("Data saving to       : " + csvPath + "\n");
             Console.ResetColor();
 
             Console.ForegroundColor = ConsoleColor.Magenta;
@@ -730,7 +666,7 @@ namespace AlexThomasBlackJackProject2026
                 Console.ResetColor();
                 Console.ReadKey();
                 return;
-                // same guard clause pattern as the password gate
+                // same guard clause pattern as the old password gate
                 // return inside Main() exits the entire program immediately
             }
 
@@ -771,28 +707,22 @@ namespace AlexThomasBlackJackProject2026
 
             // string[] = a fixed array of strings 
             // the {} initializer fills the array immediately after creation
-
             // Why did we choose to use an array here instead of a list? Because our deck never needs to grow or shrink, it is fixed in size. 
-
             // element 0 = "Ace", element 1 = "King",...element 12 = "2"
-
             string[] deck = { "Ace", "King", "Queen", "Jack",
                                "10",  "9",    "8",     "7",
                                "6",   "5",    "4",     "3",  "2" };
 
             // STEP 6 = SESSION LOOP
-
             // outer loop = keeps the session alive across multiple hands
             // sessionActive starts as true so the loop begins immediately 
-            // only flips to false when the player types N at the "play again?" prompt 
-
+            // only flips to false when the player escapes or runs out of tokens
             bool sessionActive = true;
 
             while (sessionActive)
             {
                 // these variables track ONE hand at a time 
                 // declared INSIDE the session loop so that they reset to zero every new hand 
-
                 // ***** if declared outside they would carry over from the previous hand *****
 
                 int playerTotal = 0;
@@ -809,95 +739,110 @@ namespace AlexThomasBlackJackProject2026
                 // used for soft Ace handling - if the player draws and busts but has a soft Ace,
                 // the Ace drops from 11 to 1 instead of causing an immediate bust
 
+                // DEAL OPENING HANDS
+                // in real blackjack both player and dealer receive two cards before any decisions
+                // player gets both cards face up - they can see their full starting total
+                // dealer gets one card face up (visible) and one face down (hole card - hidden)
+                // the hole card is stored but NOT shown until after the player finishes their turn
+                // this is critical for realistic gameplay - the player makes decisions based on
+                // their own hand and only ONE dealer card, not the dealer's full total
 
-                // DEALER STARTING HAND
-                // dealer receives one visible card immediately at the start of the hand
-                // this mirrors real blackjack where the player makes decisions based on visible dealer information
-                // dealer still follows normal draw rules later during the resolve phase
+                // PLAYER'S TWO STARTING CARDS
+                string openCard1 = Draw(deck);
+                string openSuit1 = SuitAssigner();
+                string openCard2 = Draw(deck);
+                string openSuit2 = SuitAssigner();
 
-                string dealerVisibleCard = Draw(deck);
-                string dealerVisibleSuit = SuitAssigner();
+                int openValue1 = cardValues[openCard1];
+                int openValue2 = cardValues[openCard2];
 
-                // REMOVED: IF/ELSE CHAIN = Dictionary lookup replaces the 13-line if/else chain
-                // cardValues["King"] returns 10 instantly - same as the chain did but in one line
+                // handle Aces in the opening hand
+                if (openCard1 == "Ace") playerAces++;
+                if (openCard2 == "Ace") playerAces++;
 
-                int dealerVisibleValue = cardValues[dealerVisibleCard];
-                dealerTotal = dealerVisibleValue;
+                playerTotal = openValue1 + openValue2;
 
-               
-
-                stats.TotalGames++;
-
-                // ++ = adds 1
-                // Same as: stats.TotalGames = stats.TotalGames + 1
-                // Incremented here so the game number is correct from the first hand 
-
-                // BETTING PROMPT = player must bet BEFORE seeing their cards
-                // minimum of 5 tokens, maximum of 100 tokens, cannot exceed their balance
-                int currentBet = 0;
-                bool validBet = false; // starts false to trigger while loop
-
-                while (!validBet)
+                // SOFT ACE ADJUSTMENT FOR OPENING HAND
+                // if two Aces = 22, drop one to 1 = total becomes 12
+                while (playerTotal > 21 && playerAces > 0)
                 {
-                    Console.ForegroundColor = ConsoleColor.Magenta;
-                    Console.WriteLine("Tokens: " + tokenBalance);
-                    Console.Write("Place your bet (min 5, max " + Math.Min(100, tokenBalance) + "): ");
-                    // Math.Min() returns the smaller of two values
-                    // prevents player from betting more than they have
-                    // if balance is 40 the max shown is 40, not 100
-                    Console.ResetColor();
-
-                    string betInput = Console.ReadLine().Trim();
-
-                    if (!int.TryParse(betInput, out currentBet))
-                    {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("Please enter a whole number.");
-                        Console.ResetColor();
-                        continue;
-                        // same continue pattern as DOB validation
-                    }
-
-                    int maxBet = Math.Min(100, tokenBalance);
-
-                    if (currentBet < 5 || currentBet > maxBet)
-                    {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("Bet must be between 5 and " + maxBet + ".");
-                        Console.ResetColor();
-                        continue;
-                    }
-
-                    validBet = true;
-                    // bet is valid - exit the betting loop
+                    playerTotal -= 10;
+                    playerAces--;
                 }
 
-                int tokensBefore = tokenBalance;
-                // snapshot of the balance BEFORE this hand starts
-                // stored in SessionRecord so we can see exactly what each hand lost or gained
+                // DEALER'S TWO STARTING CARDS
+                // first card = visible to the player
+                // second card = hole card = hidden until dealer's turn
+                string dealerVisibleCard = Draw(deck);
+                string dealerVisibleSuit = SuitAssigner();
+                string dealerHoleCard = Draw(deck);
+                string dealerHoleSuit = SuitAssigner();
 
-                // game header box
+                int dealerVisibleValue = cardValues[dealerVisibleCard];
+                int dealerHoleValue = cardValues[dealerHoleCard];
+
+                // track Aces in dealer's starting hand for soft Ace handling later
+                int dealerAcesStart = 0;
+                if (dealerVisibleCard == "Ace") dealerAcesStart++;
+                if (dealerHoleCard == "Ace") dealerAcesStart++;
+
+                // dealer total starts with BOTH cards but player only sees one
+                dealerTotal = dealerVisibleValue + dealerHoleValue;
+
+                // SOFT ACE ADJUSTMENT FOR DEALER OPENING HAND
+                while (dealerTotal > 21 && dealerAcesStart > 0)
+                {
+                    dealerTotal -= 10;
+                    dealerAcesStart--;
+                }
+
+                // display game header THEN opening hands
+                // player sees their two cards and the dealer's one visible card
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine("╔══════════════════════════════════════╗");
                 Console.WriteLine("║  GAME #" + stats.TotalGames.ToString().PadRight(30) + "║");
-                // RESOLVED BORDER MISALIGNMENT
-                // PadRight(30) pads the game number string with spaces on the right until it is 30 characters total
-                // Then, || game # is 8 characters + 30 = 38 characters total between the borders (length of top line = 38)
-
                 Console.WriteLine("╠══════════════════════════════════════╣");
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("║  [ENTER] Draw a Card                 ║");
+                Console.WriteLine("║  [ENTER] Hit                         ║");
                 Console.WriteLine("║  [N]     Stand                       ║");
+                Console.WriteLine("║  [D]     Double Down                 ║");
                 Console.WriteLine("║  [ESC]   Quit + Forfeit Bet          ║");
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine("╚══════════════════════════════════════╝");
                 Console.ResetColor();
 
-                // show the dealer's visible starting card before the player makes decisions
+                // show dealer's visible card only - hole card stays hidden
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("Dealer showing: " + dealerVisibleCard + " of " + dealerVisibleSuit);
+                Console.WriteLine("Dealer hole card: [hidden]\n");
+                Console.ResetColor();
+
+                // show player's two starting cards
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine("You were dealt: " + openCard1 + " of " + openSuit1 +
+                                  " and " + openCard2 + " of " + openSuit2);
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("Dealer visible total: " + dealerTotal + "\n");
+                Console.WriteLine("Your total:     " + playerTotal + "\n");
+                Console.ResetColor();
+
+                // check if player got blackjack on the opening deal
+                if (playerTotal == 21)
+                {
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("BLACKJACK! You hit 21 on the deal!\n");
+                    Console.ResetColor();
+                    gameOver = true;
+                }
+
+                numberOfDraws = 0;
+                // numberOfDraws starts at 0 AFTER the opening deal
+                // the two starting cards are not counted as draws
+                // draws = additional cards the player chose to take beyond the opening hand
+                // this makes the analytics more meaningful - 0 draws = player stood on opening hand
+
+                bool doubledDown = false;
+                // doubledDown tracks whether the player used double down this hand
+                // declared here so it is accessible both in the game loop and in the SessionRecord
                 Console.ResetColor();
 
                 // STEP 7 = GAME LOOP (inner loop - one hand) 
@@ -905,7 +850,6 @@ namespace AlexThomasBlackJackProject2026
                 // Session loop = controls how many hands are played
                 // Game Loop = controls what happens during a single hand
                 // it keeps running until gameOver flips to true
-
                 while (!gameOver)
                 {
                     ConsoleKeyInfo keypress = Console.ReadKey(true);
@@ -923,6 +867,13 @@ namespace AlexThomasBlackJackProject2026
                     string input = ""; // input starts as empty string
                     if (keypress.Key == ConsoleKey.Escape) input = "QUIT";
                     else if (keypress.Key == ConsoleKey.N) input = "N";
+                    else if (keypress.Key == ConsoleKey.D && numberOfDraws == 0 && !doubledDown)
+                        input = "DOUBLE";
+                    // D key = double down
+                    // only available on the first decision (numberOfDraws == 0)
+                    // meaning the player has their two opening cards and hasn't drawn yet
+                    // !doubledDown prevents doubling twice
+                    // if numberOfDraws > 0 the D key falls through to the draw branch
 
                     // Escape = quit the session entirely 
                     // N = stand, end this hand only
@@ -957,8 +908,9 @@ namespace AlexThomasBlackJackProject2026
                             // because it reads TokensAfter from the last row to restore balance
                             SessionRecord forfeitRecord = new SessionRecord();
                             forfeitRecord.SessionID = sessionID;
-                            forfeitRecord.Name = fullName;
-                            forfeitRecord.PlayerAge = CalculateAge(player.DateOfBirth);
+                            forfeitRecord.Username = player.Username;
+                            forfeitRecord.PlayerAge = playerAge;
+                            // playerAge = calculated at login, DOB was discarded
                             forfeitRecord.LoginTime = loginTime;
                             forfeitRecord.GameNumber = stats.TotalGames;
                             forfeitRecord.PlayerTotal = playerTotal;
@@ -984,45 +936,81 @@ namespace AlexThomasBlackJackProject2026
                     }
                     else if (input == "N")
                     {
-                        // GUARD CLAUSE: prevent standing on 0
-                        // a player must draw at least one card before they can stand
-                        // standing on 0 is an invalid game state - it means the player
-                        // pressed N without ever drawing, which produces meaningless data
-                        // and can result in wins that were never earned
-                        // this mirrors real blackjack where you always receive at least one card
-                        if (numberOfDraws == 0)
+                        // STRATEGY WARNING: LOW STAND 
+                        // only triggers if strategy mode is activated AND total is 11 or lower
+                        // standing on 11 or less is statistically very weak
+                        // player gets informed but not blocked - informational only
+                        if (strategyOn && playerTotal <= 11)
                         {
-                            Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("You must draw at least one card before standing.");
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine("⚠  Strategy tip: you are standing on " + playerTotal + ".");
+                            Console.WriteLine("   Standing this low gives the dealer a strong advantage.");
                             Console.ResetColor();
-                            // do NOT set gameOver = true
-                            // the inner loop continues and waits for the player to draw
+                            Console.ForegroundColor = ConsoleColor.Cyan;
+                            Console.WriteLine("   [ENTER] Draw instead  [N] Stand anyway  [ESC] Quit");
+                            Console.ResetColor();
+                        }
+
+                        // player chose to stand - end this hand only
+                        // sessionActive stays true so the play again prompt still runs
+                        gameOver = true;
+                    }
+                    else if (input == "DOUBLE")
+                    {
+                        // DOUBLE DOWN
+                        // player doubles their bet and receives exactly one more card
+                        // hand ends automatically after that card - no further drawing
+                        // only available on opening two cards before any additional draws
+
+                        if (currentBet * 2 > tokenBalance)
+                        {
+                            // player doesn't have enough tokens to double
+                            // show message and let them choose hit or stand instead
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Not enough tokens to double down. Current bet: " +
+                                              currentBet + ", Balance: " + tokenBalance);
+                            Console.ResetColor();
+                            // do not set gameOver - loop continues, player picks another action
                         }
                         else
                         {
-                            // STRATEGY WARNING: LOW STAND 
-                            // only triggers if strategy mode is activated AND total is 11 or lower
-                            // standing on 11 or less is statistically very weak
-                            // player gets informed but not blocked - informational only
-                            if (strategyOn && playerTotal <= 11)
+                            // valid double down
+                            currentBet *= 2;
+                            // *= multiplies currentBet by 2
+                            // shorthand for currentBet = currentBet * 2
+                            doubledDown = true;
+
+                            Console.ForegroundColor = ConsoleColor.Magenta;
+                            Console.WriteLine("DOUBLE DOWN! Bet doubled to " + currentBet + " tokens.");
+                            Console.ResetColor();
+
+                            // deal exactly one more card
+                            string doubleCard = Draw(deck);
+                            string doubleSuit = SuitAssigner();
+                            int doubleValue = cardValues[doubleCard];
+
+                            if (doubleCard == "Ace") playerAces++;
+                            playerTotal += doubleValue;
+
+                            // soft Ace adjustment
+                            while (playerTotal > 21 && playerAces > 0)
                             {
-                                Console.ForegroundColor = ConsoleColor.Yellow;
-                                Console.WriteLine("⚠  Strategy tip: you are standing on " + playerTotal + ".");
-                                Console.WriteLine("   Standing this low gives the dealer a strong advantage.");
-                                Console.WriteLine("   Press any key to stand anyway...");
-                                Console.ResetColor();
-                                Console.ReadKey(true);
-                                stats.SuggestionsOverridden++;
-                                // increment session counter each time a warning is acknowledged
+                                playerTotal -= 10;
+                                playerAces--;
                             }
 
-                            // player chose to stand - end this hand only
-                            // sessionActive stays true so the play again prompt still runs
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine("You drew:   " + doubleCard + " of " + doubleSuit);
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine("Your total: " + playerTotal + "\n");
+                            Console.ResetColor();
+
+                            // hand ends automatically after double down
                             gameOver = true;
                         }
                     }
                     else
-                    {
+                        {
                         // player pressed Enter - draw one card for the player only
                         // dealer does NOT draw here - dealer draws after player stands
                         // this matches real blackjack dealer rules
@@ -1035,9 +1023,7 @@ namespace AlexThomasBlackJackProject2026
                         string playerCard = Draw(deck);
                         string playerSuit = SuitAssigner();
 
-                   
                         // REMOVED: If/Else Chain
-
                         // cardValues[playerCard] looks up the point value in one line
                         // the Dictionary was declared at the top of BlackjackGame
                         int playerCardValue = cardValues[playerCard];
@@ -1046,8 +1032,10 @@ namespace AlexThomasBlackJackProject2026
                         // Ace is always added as 11 first, then dropped to 1 if needed
                         if (playerCard == "Ace") playerAces++;
 
-
                         playerTotal += playerCardValue;
+                        // += adds the card value to the running total
+                        // shorthand for playerTotal = playerTotal + playerCardValue
+                        // accumulates each pass through the loop from its starting value of 0
 
                         // SOFT ACE ADJUSTMENT FOR PLAYER
                         // if drawing this card would bust the player AND they have a soft Ace,
@@ -1060,12 +1048,6 @@ namespace AlexThomasBlackJackProject2026
                             playerAces--;
                             // one fewer Ace is being counted as 11
                         }
-
-
-
-                        // += adds the card value to the running total
-                        // shorthand for playerTotal = playerTotal + playerCardValue
-                        // accumulates each pass through the loop from its starting value of 0
 
                         // print the card and total ONCE right after the draw
                         // the duplicate in the original was caused by printing here AND again after the strategy warning
@@ -1103,9 +1085,14 @@ namespace AlexThomasBlackJackProject2026
                             Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.WriteLine("⚠  Strategy tip: your total is " + playerTotal + ".");
                             Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
-                            Console.WriteLine("   Press any key to continue...");
                             Console.ResetColor();
-                            Console.ReadKey(true);
+                            // reprint compact controls so player knows exactly what to press next
+                            // pressing Enter here will draw, N will stand, ESC will quit
+                            Console.ForegroundColor = ConsoleColor.Cyan;
+                            Console.WriteLine("   [ENTER] Draw anyway  [N] Stand  [ESC] Quit");
+                            Console.ResetColor();
+                            // do not need to call ReadKey here - the game loop already reads the next keypress
+                            // the warning is purely informational, control returns to the game loop
                             // player presses any key to acknowledge and move on
                             overrodeSuggestion = true;
                             // true = a warning was shown this hand
@@ -1120,6 +1107,7 @@ namespace AlexThomasBlackJackProject2026
                     // only runs when gameOver is true AND session is still active
                     // the forfeit path already wrote its record and set sessionActive = false
                     // so this block correctly skips on forfeit
+
                     if (gameOver && sessionActive)
                     {
                         // DEALER DRAWING PHASE
@@ -1155,10 +1143,7 @@ namespace AlexThomasBlackJackProject2026
                                 string dealerCard = Draw(deck);
                                 string dealerSuit = SuitAssigner();
 
-
-
                                 // REMOVED: If/Else Chain
-
                                 // Dictionary lookup - same pattern as player draw above
                                 int dealerCardValue = cardValues[dealerCard];
 
@@ -1194,15 +1179,14 @@ namespace AlexThomasBlackJackProject2026
                             // result determination below handles both cases correctly
                         }
 
-                        // REMOVED: If/Else Chain 
-
+                        // REMOVED: If/Else Chain
                         // DetermineWinner() extracts the result logic into its own method
                         // takes both totals, returns "Win", "Loss", or "Tie"
                         // the logic itself lives in the method above Main()
                         string result = DetermineWinner(playerTotal, dealerTotal);
 
                         Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine("\n" + player.FirstName + " " + player.LastName + "'s total: " + playerTotal);
+                        Console.WriteLine("\n" + player.Username + "'s total: " + playerTotal);
                         Console.WriteLine("Dealer's total:  " + dealerTotal);
 
                         if (result == "Win")
@@ -1272,10 +1256,9 @@ namespace AlexThomasBlackJackProject2026
                         // once written it is thrown away, next hand creates a new one
                         SessionRecord record = new SessionRecord();
                         record.SessionID = sessionID;
-                        record.Name = fullName;
-                        record.PlayerAge = CalculateAge(player.DateOfBirth);
-                        // CalculateAge called fresh rather than storing age
-                        // we only store DateOfBirth in PlayerInfo - DRY principle
+                        record.Username = player.Username;
+                        record.PlayerAge = playerAge;
+                        // playerAge = calculated at login from DOB, DOB then discarded
                         record.LoginTime = loginTime;
                         record.GameNumber = stats.TotalGames;
                         record.PlayerTotal = playerTotal;
@@ -1301,17 +1284,25 @@ namespace AlexThomasBlackJackProject2026
                         Console.ResetColor();
 
                         // play again prompt - only shows if player still has tokens
+                        // play again = place another bet
+                        // if they want to play again they just place a bet naturally
+                        // if they want to quit they press Escape
+                        // this blends two prompts into one natural flow
                         if (sessionActive)
                         {
                             Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("Play again? (Enter = yes, Escape = no)");
+                            Console.WriteLine("─────────────────────────────────────");
+                            Console.WriteLine("Place a bet to play again, or press ESC to exit.");
                             Console.ResetColor();
 
-                            ConsoleKeyInfo playAgain = Console.ReadKey(true);
-                            if (playAgain.Key == ConsoleKey.Escape)
+                            // peek at the next keypress before entering the betting loop
+                            // if they press Escape we exit cleanly without asking for a bet
+                            // if they press anything else we fall into the betting loop naturally
+                            ConsoleKeyInfo peek = Console.ReadKey(true);
+                            if (peek.Key == ConsoleKey.Escape)
                                 sessionActive = false;
-                            // flips outer loop to false
-                            // inner loop already done because gameOver is true
+                            // sessionActive = false exits the outer session loop
+                            // no bet prompt shown - session ends cleanly
                         }
 
                     }   // closes if (gameOver && sessionActive)
@@ -1323,6 +1314,7 @@ namespace AlexThomasBlackJackProject2026
 
             // STEP 10 = END OF SESSION
             // both loops exited - session is over
+            // simple menu gives the player options rather than just printing and closing
             Console.ForegroundColor = ConsoleColor.Magenta;
             Console.WriteLine("\n╔══════════════════════════════════════╗");
             Console.WriteLine("║         SESSION COMPLETE              ║");
@@ -1332,11 +1324,52 @@ namespace AlexThomasBlackJackProject2026
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("Final token balance      : " + tokenBalance);
             Console.WriteLine("Strategy mode            : " + (stats.StrategyModeOn ? "On" : "Off"));
-            // ternary reads the bool and prints a readable label
             Console.WriteLine("Suggestions overridden   : " + stats.SuggestionsOverridden);
-            Console.WriteLine("Full data saved to       : " + csvPath);
+            Console.WriteLine("Hands played             : " + stats.TotalGames);
+            Console.WriteLine("Wins                     : " + stats.PlayerWins);
+            Console.WriteLine("Losses                   : " + stats.DealerWins);
+            Console.WriteLine("Ties                     : " + stats.Ties);
+            Console.WriteLine("Full data saved to       : " + csvPath + "\n");
+            Console.ResetColor();
+
+            // end of session menu
+            // gives the player options instead of just closing
+            bool inMenu = true;
+            while (inMenu)
+            {
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("╔══════════════════════════════════════╗");
+                Console.WriteLine("║           WHAT'S NEXT?               ║");
+                Console.WriteLine("╠══════════════════════════════════════╣");
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("║  [P]  Play again (new session)       ║");
+                Console.WriteLine("║  [ESC] Exit                          ║");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("╚══════════════════════════════════════╝");
+                Console.ResetColor();
+
+                ConsoleKeyInfo menuKey = Console.ReadKey(true);
+
+                if (menuKey.Key == ConsoleKey.P)
+                {
+                    // restart the entire program by calling Main() recursively
+                    // this lets the player log in again as the same or different user
+                    // in a future version this would return to a proper main menu
+                    // for now recursive Main() achieves the same result simply
+                    inMenu = false;
+                    Main();
+                    // NOTE: recursive Main() is a simple solution for now
+                    // Component 2 will replace this with a proper game loop at the top level
+                }
+                else if (menuKey.Key == ConsoleKey.Escape)
+                {
+                    inMenu = false;
+                    // exits the menu loop - program falls through and closes naturally
+                }
+            }
+
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("\nThanks for playing. Press any key to exit.");
+            Console.WriteLine("Thanks for playing. Press any key to exit.");
             Console.ResetColor();
             Console.ReadKey();
 
