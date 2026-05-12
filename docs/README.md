@@ -21,6 +21,12 @@ Nobody assigned this to me. I identified gaps in what my background could demons
 
 ---
 
+## Gameplay
+
+![Gameplay](screenshots/gameplay_p1_5.12.26.png)
+
+---
+
 ## The pipeline
 
 ```
