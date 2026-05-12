@@ -888,11 +888,96 @@ namespace AlexThomasBlackJackProject2026
                 Console.ResetColor();
 
                 // check if player got blackjack on the opening deal
+                // if so we skip the game loop entirely and go straight to resolution
+                // this requires handling the result here rather than inside the game loop
                 if (playerTotal == 21)
                 {
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine("BLACKJACK! You hit 21 on the deal!\n");
                     Console.ResetColor();
+
+                    // reveal dealer hole card before determining result
+                    // even on an opening Blackjack the dealer's full hand matters
+                    // if dealer also has 21 it is a tie, not a player win
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine("── Dealer's turn ──────────────────────");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard +
+                                      " of " + dealerHoleSuit);
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                    Console.ResetColor();
+
+                    // determine result
+                    string openingResult = DetermineWinner(playerTotal, dealerTotal);
+
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.WriteLine(player.Username + "'s total: " + playerTotal);
+                    Console.WriteLine("Dealer's total:  " + dealerTotal);
+
+                    if (openingResult == "Win")
+                    {
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("\n★  GAME OVER: " + openingResult + "  ★\n");
+                        tokenBalance += currentBet;
+                        Console.WriteLine("You won " + currentBet + " tokens! Balance: " + tokenBalance);
+                    }
+                    else
+                    {
+                        // tie - both player and dealer hit 21 on the deal
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("\n★  GAME OVER: " + openingResult + "  ★\n");
+                        Console.WriteLine("Tie — bet returned. Balance: " + tokenBalance);
+                    }
+                    Console.ResetColor();
+
+                    // update stats
+                    if (openingResult == "Win") { stats.PlayerWins++; }
+                    else { stats.Ties++; }
+
+                    // write the session record
+                    SessionRecord openingRecord = new SessionRecord();
+                    openingRecord.SessionID = sessionID;
+                    openingRecord.Username = player.Username;
+                    openingRecord.PlayerAge = playerAge;
+                    openingRecord.LoginTime = loginTime;
+                    openingRecord.GameNumber = stats.TotalGames;
+                    openingRecord.PlayerTotal = playerTotal;
+                    openingRecord.DealerTotal = dealerTotal;
+                    openingRecord.Result = openingResult;
+                    openingRecord.PlayerBusted = false;
+                    openingRecord.DealerBusted = false;
+                    openingRecord.NumberOfDraws = 0;
+                    openingRecord.BetAmount = currentBet;
+                    openingRecord.TokensBefore = tokensBefore;
+                    openingRecord.TokensAfter = tokenBalance;
+                    openingRecord.StrategyMode = strategyOn ? "On" : "Off";
+                    openingRecord.OverrodeSuggestion = false;
+                    openingRecord.DoubledDown = false;
+
+                    WriteRecordToCSV(openingRecord, csvPath);
+
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Hand saved.\n");
+                    Console.ResetColor();
+
+                    // check tokens before showing play again prompt
+                    if (tokenBalance < 5)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("\nNot enough tokens to continue. Game over.");
+                        Console.ResetColor();
+                        sessionActive = false;
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("─────────────────────────────────────");
+                        Console.WriteLine("Type your bet to continue, or type 'exit' to quit.");
+                        Console.ResetColor();
+                    }
+
+                    // skip the game loop entirely - hand is already resolved
                     gameOver = true;
                 }
 
