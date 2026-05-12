@@ -167,7 +167,7 @@ The game currently prints a session summary at the end of each session showing:
 - Strategy mode status
 - Number of suggestions overridden
 
-SQL-powered live analytics will be added in Component 2.
+SQL-powered live analytics will be added in Phase 3.
 
 ---
 
