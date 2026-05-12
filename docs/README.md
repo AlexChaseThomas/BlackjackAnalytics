@@ -108,13 +108,13 @@ Built a fully functional Blackjack game with token economy, persistent balances,
 ### ✅ Phase 2 — Code cleanup + blackjack realism (complete)
 Replaced real-name collection with a username system. Removed PII. Implemented proper casino deal order (player gets two cards, dealer gets one visible + one hole card). Added double down. Extracted `DetermineWinner()` method. Replaced if/else card value chains with a Dictionary lookup. Added opening hand strategy warnings.
 
-### 🔄 Component 2 — SQLite integration (in progress)
+### 🔄 Phase 3 — SQLite integration (in progress)
 Replacing CSV with a normalized SQLite database. Two tables: `Players` (one row per username) and `GameSessions` (one row per hand). SQL queries will run at end of each session showing the player their live analytics.
 
-### ⬜ Component 3 — Python analysis
+### ⬜ Phase 4 — Python analysis
 Pandas scripts analyzing bust rates, win rate trends, strategy impact, and token flow. Matplotlib charts committed to the repo.
 
-### ⬜ Component 4 — Power BI dashboard
+### ⬜ Phase 5 — Power BI dashboard
 Four-page interactive dashboard connecting directly to the SQLite database. Session overview, hand analysis, strategy analysis, token economy.
 
 ---
