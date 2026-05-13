@@ -1,69 +1,33 @@
 ﻿using System;
-
-// without 'using System':
-// System.Console.WriteLine("Hello");
-
-// with 'using System':
-// Console.WriteLine("Hello"); 
-
 using System.Collections.Generic;
-// provides List <T> and Dictionary <K,V>
 using System.IO;
-// provides File.ReadAllLines() = reading card deck file 
-using System.Linq;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-// provides .ToArray (), .Count(),.Where() - data querying 
+
 
 namespace AlexThomasBlackJackProject2026
 {
-    /* 
-    
-    // This program has two different distinct uses of classes:  #1. model classes or POCOs (Plain Old C# Objects) 
-    //What is a class? 
-    // Class = blueprint = defines what something is (its data) and what it can do (its methods). 
-    // Nothing exists until you CREATE an instance of it using new 
-    // For Example: 
-    // This is the blueprint — nothing exists yet
- 
-
-    class BlackjackGame
-    {
-        // fields = what it HAS
-        // methods = what it CAN DO
-    }
-
-    // This creates an actual object from the blueprint
-
-    BlackjackGame myGame = new BlackjackGame(); 
-
-    // Analogy - a class is the architectural drawing of a house while the new keyword actually builds a house from that drawing
-    // ... you can build as many house as you want from the same drawing; each one is a separate instance
-
-     */
-
-    /*
-  
-     * This program uses two (2) distinct types of classes:
-    
-     * #1 Data Class (Model Classes or POCOs - Plain Old C# Objects) 
-     * This type of class just holds data - no logic, no methods. 
-  
-     * ***** INTERVIEW PREP = this is an example of object-oriented programming for data roles *****
-     
-     */
+    // ══════════════════════════════════════════════════════════════════
+    // BLACKJACK ANALYTICS — C# Console Application
+    // Author  : Alex Thomas
+    // GitHub  : https://github.com/AlexChaseThomas/BlackjackAnalytics
+    // Version : Phase 3 — 52-card deck, proper deal order, double down
+    // ══════════════════════════════════════════════════════════════════
+    //
+    // DATA CLASSES (POCOs):
+    //   PlayerInfo    — player identity (username only, no PII)
+    //   Card          — single playing card with name and suit
+    //   SessionRecord — one row of analytics data per hand
+    //   GameStats     — session-level counters
+    //
+    // LOGIC CLASS:
+    //   BlackjackGame — all methods and Main() entry point
+    // ══════════════════════════════════════════════════════════════════
 
     // PlayerInfo = a data class that stores who the player is 
-
-    // Phase 2: redesigned PlayerInfo to remove PII security risk 
-    // username system replaces first/last name; username acts as a primary key in the database, linking all session records
-    // BirthYear removed entirely - DOB is entered for verification only and immediately discarded
-    // only the calculated age integer is kept, stored separately as playerAge in Main()
     public class PlayerInfo
     {
         public string Username; // unique identifier chosen by the player
         // no DOB, no real name - no PII stored anywhere in this class
     }
-
 
     // Card Class = represents a single playing card with a name and suit 
     // Phase 3: Card class replaces the separate Draw() and SuitAssigner() methods used in Phase 1 & 2
@@ -89,14 +53,12 @@ namespace AlexThomasBlackJackProject2026
         }
     }
 
-
-    // 
     // SessionRecord = a data class that stores what happened during a hand - it gets created fresh at the end of every single hand, filled in with that hand's results, written to the CSV, and then thrown away. Next hand, a new one is created
     public class SessionRecord
     {
         // basic session information fields
         public int SessionID;
-        public string Username;   // replaces Name - matches the new identity system
+        public string Username;   
         public int PlayerAge;  // calculated age only - full DOB is never stored
         public string LoginTime;
         public int GameNumber;
@@ -121,7 +83,6 @@ namespace AlexThomasBlackJackProject2026
         public string StrategyMode;
         public bool OverrodeSuggestion;
     }
-
     public class GameStats
     {
         // Game results tracking 
@@ -138,11 +99,6 @@ namespace AlexThomasBlackJackProject2026
         public bool StrategyModeOn = false;
         public int SuggestionsOverridden = 0;
     }
-
-    /* #2 Logic Class (the main game class) 
-     * This is where behavior lives - this class does things rather than just storing values like the model class 
-        */
-
     class BlackjackGame // this type of class is only accessible within this file/namespace (default = "internal")
     {
         // Single shared Random instance for the entire class; declared at class level = all methods share it 
@@ -152,7 +108,6 @@ namespace AlexThomasBlackJackProject2026
         static Random rand = new Random();
 
         // DICTIONARY: cardValues = maps each card name to its point value 
-        // REPLACES: if/else chains that appeared three (3) times in Phase 1
         // Dictionary<string, int> = key is the card name (string), value is the point worth (int)
         // Similar to VLOOKUP in Excel or a JOIN in SQL 
         // give it a key ("Ace"), get back a value (11) instantly
@@ -163,10 +118,6 @@ namespace AlexThomasBlackJackProject2026
             { "6",      6 }, { "5",      5 }, { "4",      4 }, { "3",     3 },
             { "2",      2 }
         };
-
-        // REMOVED: SuitAssigner() and Draw()
-        // replaced by DealCard() which deals from a proper shuffled 52-card deck
-        // duplicate cards within a hand are now impossible
 
 
         // METHOD: BuildDeck = creates a full 52-card deck as a List of Card objects 
@@ -195,7 +146,6 @@ namespace AlexThomasBlackJackProject2026
         // Fisher-Yates = the standard, unbiased shuffle algorithim = works by moving backwards through the list and swapping each card with a randomly chosen card at or before its position
         // with a randomly chosen card at or before its position
         // result = every possible ordering of the deck is equally likely 
-
         static void ShuffleDeck(List<Card> deck)
         {
             // start at the last card and work backwards
@@ -238,10 +188,8 @@ namespace AlexThomasBlackJackProject2026
             return card;
         }   // closes DealCard
 
-
         // METHOD: CalculateBustChance = takes the player's current total, returns bust probability as a string 
         // Used by the strategy warning system to demonstrate informed risk to the player
-
         static string CalculateBustChance(int currentTotal)
         {
             // safeRoom = the highest card value that won't bust the player = any card with a value higher than safeRoom will cause a bust
@@ -317,7 +265,6 @@ namespace AlexThomasBlackJackProject2026
                         return balance;
                 }
             }
-
             // username not found anywhere in the file = brand new player
             return 100;
         }   // closes LoadPlayerBalance
@@ -539,7 +486,7 @@ namespace AlexThomasBlackJackProject2026
 
             // NOTE: username uniqueness is not enforced in Phase 2 (CSV version)
             // two players could theoretically register the same username
-            // this will be fixed in Component 2 when SQLite is integrated
+            // this will be fixed in Phase 3 when SQLite is integrated
             // the Players table will have a UNIQUE constraint on the Username column
             // which means the database itself will reject duplicate usernames at the INSERT level
             // for now the CSV version operates on trust - whoever types a username gets that balance
@@ -731,8 +678,6 @@ namespace AlexThomasBlackJackProject2026
                 : "Basic strategy suggestions OFF.\n");
             Console.ResetColor();
 
-            // REMOVED: Deck Array 
-
             // STEP 5 = BUILD AND SHUFFLE THE DECK
             // BuildDeck() creates all 52 cards - 13 values x 4 suits
             // ShuffleDeck() randomizes the order using Fisher-Yates algorithm
@@ -764,7 +709,7 @@ namespace AlexThomasBlackJackProject2026
                 // overrodeSuggestion declared here so it is accessible both in the draw branch where it gets set
                 // AND outside the draw branch where it gets written to the SessionRecord
 
-                /// playerAces tracks how many Aces in the player's hand are currently counted as 11
+                // playerAces tracks how many Aces in the player's hand are currently counted as 11
                 // used for soft Ace handling - if the player draws and busts but has a soft Ace,
                 // the Ace drops from 11 to 1 instead of causing an immediate bust
 
@@ -788,7 +733,7 @@ namespace AlexThomasBlackJackProject2026
                     // allow the player to type "exit" to leave instead of placing a bet
                     // true ESC during ReadLine() isn't possible in a console app without
                     // switching to ReadKey - this is the simplest workaround for now
-                    // Component 2 will replace ReadLine betting with a proper ReadKey flow
+                    
                     if (betInput.ToLower() == "exit")
                     {
                         sessionActive = false;
@@ -829,8 +774,6 @@ namespace AlexThomasBlackJackProject2026
                 // the hole card is stored but NOT shown until after the player finishes their turn
                 // this is critical for realistic gameplay - the player makes decisions based on
                 // their own hand and only ONE dealer card, not the dealer's full total
-
-                // REMOVED: Draw(deck) + SuitAssigner have been replaced by the card distribution system built in Phase 3
 
                 // PLAYER'S TWO STARTING CARDS
                 Card openCard1 = DealCard(deck);
@@ -1033,7 +976,6 @@ namespace AlexThomasBlackJackProject2026
                     Console.ResetColor();
                 }
 
-
                 numberOfDraws = 0;
                 // numberOfDraws starts at 0 AFTER the opening deal
                 // the two starting cards are not counted as draws
@@ -1190,6 +1132,9 @@ namespace AlexThomasBlackJackProject2026
                             int doubleValue = cardValues[doubleCard.Name];
                             if (doubleCard.Name == "Ace") playerAces++;
 
+                            playerTotal += doubleValue;
+                            // add the double down card value to the running total
+
                             // soft Ace adjustment
                             while (playerTotal > 21 && playerAces > 0)
                             {
@@ -1207,8 +1152,7 @@ namespace AlexThomasBlackJackProject2026
                             gameOver = true;
                         }
                     }
-                    else
-                        {
+                    else {
                         // player pressed Enter - draw one card for the player only
                         // dealer does NOT draw here - dealer draws after player stands
                         // this matches real blackjack dealer rules
@@ -1221,7 +1165,6 @@ namespace AlexThomasBlackJackProject2026
                         int playerCardValue = cardValues[playerCard.Name];
                         // track Aces separately for soft Ace handling
                         if (playerCard.Name == "Ace") playerAces++;
-
 
                         playerTotal += playerCardValue;
                         // += adds the card value to the running total
@@ -1370,7 +1313,7 @@ namespace AlexThomasBlackJackProject2026
                             // result determination below handles both cases correctly
                         }
 
-                    
+        
                         // DetermineWinner() extracts the result logic into its own method
                         // takes both totals, returns "Win", "Loss", or "Tie"
                         // the logic itself lives in the method above Main()
@@ -1401,9 +1344,7 @@ namespace AlexThomasBlackJackProject2026
                         if (result == "Win") stats.PlayerWins++;
                         else if (result == "Loss") stats.DealerWins++;
                         else stats.Ties++;
-
-                        // playerTotal > 21 evaluates directly to true or false
-                        // same concept as 'return input == "Password"' in PasswordChecker
+        
                         if (playerTotal > 21) stats.PlayerBusts++;
                         if (dealerTotal > 21) stats.DealerBusts++;
 
@@ -1543,7 +1484,7 @@ namespace AlexThomasBlackJackProject2026
                     inMenu = false;
                     Main();
                     // NOTE: recursive Main() is a simple solution for now
-                    // Component 2 will replace this with a proper game loop at the top level
+                    // Phase 3 will replace this with a proper game loop at the top level
                 }
                 else if (menuKey.Key == ConsoleKey.Escape)
                 {
