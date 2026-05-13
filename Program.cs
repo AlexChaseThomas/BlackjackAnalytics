@@ -768,6 +768,10 @@ namespace AlexThomasBlackJackProject2026
                     validBet = true;
                 }
 
+                // if the player typed "exit" during betting, stop here
+                // do not deal cards or enter the game loop
+                if (!sessionActive) break;
+
                 int tokensBefore = tokenBalance;
                 // snapshot of the balance BEFORE this hand starts
                 // stored in SessionRecord so we can see exactly what each hand lost or gained
@@ -1432,7 +1436,7 @@ namespace AlexThomasBlackJackProject2026
                         {
                             Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.WriteLine("─────────────────────────────────────");
-                            Console.WriteLine("Type your bet to continue, or type 'exit' to quit.");
+                            Console.WriteLine("Place a bet to continue, or type 'exit' to see your session summary.");
                             Console.ResetColor();
                         }
                     }   // closes if (gameOver && sessionActive)
@@ -1447,7 +1451,7 @@ namespace AlexThomasBlackJackProject2026
             // simple menu gives the player options rather than just printing and closing
             Console.ForegroundColor = ConsoleColor.Magenta;
             Console.WriteLine("\n╔══════════════════════════════════════╗");
-            Console.WriteLine("║         SESSION COMPLETE              ║");
+            Console.WriteLine("║       SESSION COMPLETE               ║");
             Console.WriteLine("╚══════════════════════════════════════╝");
             Console.ResetColor();
 
