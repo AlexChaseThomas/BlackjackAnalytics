@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 // provides File.ReadAllLines() = reading card deck file 
 using System.Linq;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 // provides .ToArray (), .Count(),.Where() - data querying 
 
 namespace AlexThomasBlackJackProject2026
@@ -63,7 +64,34 @@ namespace AlexThomasBlackJackProject2026
         // no DOB, no real name - no PII stored anywhere in this class
     }
 
-    // SessionRecord is a data class that stores what happened during a hand - it gets created fresh at the end of every single hand, filled in with that hand's results, written to the CSV, and then thrown away. Next hand, a new one is created
+
+    // Card Class = represents a single playing card with a name and suit 
+    // Phase 3: Card class replaces the separate Draw() and SuitAssigner() methods used in Phase 1 & 2
+    // Why? - previously, Draw () would pick a random card from a 13-card name array with no memory of what was already drawn; meaning the same card could appear multiple times in one hand (impossible in a real 52-card deck)
+    public class Card
+    {
+        public string Name; // "Ace", "King", "Queen" etc
+        public string Suit; // "Hearts", "Diamonds", "Clubs", "Spades"
+
+        // constructor - called with new Card("Ace", "Hearts")
+        // sets both fields in one line when the card is created
+        public Card(string name, string suit)
+        {
+            Name = name;
+            Suit = suit;
+        }
+
+        // override ToString() so Console.WriteLine(card) prints "Ace of Hearts"
+        // instead of the default class name
+        public override string ToString()
+        {
+            return Name + " of " + Suit;
+        }
+    }
+
+
+    // 
+    // SessionRecord = a data class that stores what happened during a hand - it gets created fresh at the end of every single hand, filled in with that hand's results, written to the CSV, and then thrown away. Next hand, a new one is created
     public class SessionRecord
     {
         // basic session information fields
@@ -136,91 +164,84 @@ namespace AlexThomasBlackJackProject2026
             { "2",      2 }
         };
 
-        // methods live here - draw (), SuitAssigner(), Main(), etc. 
+        // REMOVED: SuitAssigner() and Draw()
+        // replaced by DealCard() which deals from a proper shuffled 52-card deck
+        // duplicate cards within a hand are now impossible
 
-        // SuitAssigner = method 
-        // method = a named block of code that does one specific job - you write it once
-        // and can call it as many times as you want from anywhere in the program
 
-        // static = belongs to the class itself, not an object made from the class 
-
-        // string before SuitAssigner = this method returns a string 
-
-        // METHOD: SuitAssigner
-        public static string SuitAssigner() // the () means this method takes no input, it doesn't need any information from the outside to do its job
+        // METHOD: BuildDeck = creates a full 52-card deck as a List of Card objects 
+        // 13 card values * 4 suits = 52 unique cards 
+        // called once to build, then ShuffleDeck() randomizes the order
+        static List<Card> BuildDeck()
         {
-            // List <string> suits creates a List - a resizable ordered collection where every item must be a string. 
-            // List <string> is a generic type parameter - it's how you tell the List what kind of items (data type) it will hold. 
-            List<string> suits = new List<string>() // () = initializer - a shortcut that lets you fill the list with values at the same moment you create it (rather than calling .Add() four times)
-                { "Hearts", "Diamonds", "Clubs", "Spades" };
+            List<Card> deck = new List<Card>();
 
-            // REMOVED: Random Number Generator 
-            // rand is the shared class-level Random instance declared at the top of BlackjackGame
-            // removing the local new Random() here prevents the seed collision bug
+            string[] names = { "Ace", "King", "Queen", "Jack",
+                                "10", "9", "8", "7",
+                                "6", "5", "4", "3", "2" };
 
-            return suits[rand.Next(0, suits.Count)];
+            string[] suits = { "Hearts", "Diamonds", "Clubs", "Spades" };
 
-            // suits [n] = retrives the item at index n 
-            // suits [0] = hearts, suits [1] = diamonds...and so on
+            // nested loops = every name gets paired with every suit
+            // 13 names x 4 suits = 52 cards total
+            foreach (string name in names)
+                foreach (string suit in suits)
+                    deck.Add(new Card(name, suit));
 
-            // rand.Next(0, suits.Count) 
-            // generates a random integer starting at 0 and going up to but not including suits.Count - .Count = a property on the List that tells you how many items it contains. counts the number of items in the list suits (so its equivalent to 4 as in next note)
-            // since there are 4 suits, suits.Count is 4, so you get 0,1,2, or 3 - never 4. 
-            // rand.Next() = putting this inside brackets = means you generate the random number and use it as 
+            return deck;
+        }   // closes BuildDeck
 
-            /* Alternative, less efficient method (for the purpose of this game)
-             * 
-             * List<string> suits = new List<string>(); // creates an empty list - no items yet
-             * 
-             * suits.Add("Hearts");
-             * suits.Add("Diamonds");
-             * suits.Add("Clubs");
-             * suits.Add("Spades");
-             * 
-             * When you might use this alternative method:
-             * 
-             * The initializer {} that we used in our program ONLY works if you know all the values in your list the moment you make it (there are only 4 suits of cards so we used the initializer in this program)
-             * 
-             * Here is an example of when a method is being used to make a list that you do not know how long it will eventually be 
-             * This method dynamically adds cards that have already been drawn to a list. 
-             * You can't use the initializer there because you don't know what cards will be drawn ahead of time (its random).
-             * 
-             * List<string> drawnCards = new List<string>(); // starts empty 
-             * 
-             * drawnCards.Add(currentCard); // adds whatever card was just drawn
-             */
-        }   // closes SuitAssigner
+        // METHOD: ShuffleDeck = randomizes the order of cards in the deck using Fisher-Yates shuffle
+        // Fisher-Yates = the standard, unbiased shuffle algorithim = works by moving backwards through the list and swapping each card with a randomly chosen card at or before its position
+        // with a randomly chosen card at or before its position
+        // result = every possible ordering of the deck is equally likely 
 
-        // METHOD: Draw
-        static string Draw(string[] deck) // string[] = an array of strings 
-                                          // whenever the code calls the method Draw(deck) it passes the entire deck array in and the method receives it under local name deck
-
-        // Array vs. List
-
-        // Array = fixed size at creation time, and cannot grow or shrink. 
-        // Lists = dynamic 
-
+        static void ShuffleDeck(List<Card> deck)
         {
-            // REMOVED: RANDOM NUMBER GENERATOR
-            // rand is the shared class-level Random instance declared at the top of BlackjackGame
+            // start at the last card and work backwards
+            for (int i = deck.Count - 1; i > 0; i--)
+            {
+                // pick a random index from 0 to i (inclusive)
+                int j = rand.Next(i + 1);
 
-            // deck.Length = number of cards in the array; you use .Length for an array but .Count for a list - they do the same thing but the property name differs
-            // int pick = declares a variable of type int to store the random index - storing it in a named variable (pick) before using it makes the code easier to read and debug; you could also print pick if you wanted to see what index was chosen.
-            int pick = rand.Next(deck.Length); // randomly picks an index number from the deck and assigns it to the int variable pick
-            return deck[pick]; // retrieves the card name at the assigned index
-        }   // closes Draw
+                // swap deck[i] and deck[j]
+                Card temp = deck[i];
+                deck[i] = deck[j];
+                deck[j] = temp;
+            }
+            // after this loop every card is in a random position
+            // no card appears twice - the same 52 cards just reordered
+        }   // closes ShuffleDeck
 
-        // REMOVED: PasswordChecker
-        // removed in Phase 2 - password was visible in source code and provided no real security
-        // username system replaces it as the program entry point
+        // METHOD: DealCard = takes the top card from the deck and removes it
+        // if the deck runs low (i.e. fewer than 10 cards) it reshuffles automatically = prevents us from running out of cards mid-hand 
+        static Card DealCard(List<Card> deck)
+        {
+            // reshuffle if deck is running low
+            // 10 cards is a safe threshold - a hand can use at most ~8-9 cards
+            if (deck.Count < 10)
+            {
+                // rebuild and reshuffle the full deck
+                // in a real casino this would be a new shoe - here we just reset
+                List<Card> freshDeck = BuildDeck();
+                ShuffleDeck(freshDeck);
+                deck.Clear();
+                deck.AddRange(freshDeck);
+                // AddRange() copies all cards from freshDeck into deck
+            }
 
-        // REMOVED: CalculateAge method
-        // removed in Phase 2 - age calculation is now done inline in Step 3 of Main()
-        // the DOB is entered, age is calculated, DOB is immediately discarded
-        // only playerAge (an integer) survives - no PII stored anywhere
+            // take the top card (index 0) and remove it from the deck
+            Card card = deck[0];
+            deck.RemoveAt(0);
+            // RemoveAt(0) removes the first element and shifts everything down
+            // this is how dealing from the top of a deck works
+            return card;
+        }   // closes DealCard
+
 
         // METHOD: CalculateBustChance = takes the player's current total, returns bust probability as a string 
         // Used by the strategy warning system to demonstrate informed risk to the player
+
         static string CalculateBustChance(int currentTotal)
         {
             // safeRoom = the highest card value that won't bust the player = any card with a value higher than safeRoom will cause a bust
@@ -481,8 +502,6 @@ namespace AlexThomasBlackJackProject2026
         static void Main() // This is the entry point of every C# program, when you run your program, C# scans your code looking specifically for a method called Main (C# STARTS EXECUTING HERE)
         {
             // STEP 1 = WELCOME SCREEN
-            // password gate removed in Phase 2 - password was visible in source code and provided no real security
-            // username system replaces it as the program entry point
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("╔══════════════════════════════════════╗");
             Console.WriteLine("║      C# BLACKJACK ANALYTICS          ║");
@@ -712,15 +731,16 @@ namespace AlexThomasBlackJackProject2026
                 : "Basic strategy suggestions OFF.\n");
             Console.ResetColor();
 
-            // STEP 5 = BUILD THE DECK
+            // REMOVED: Deck Array 
 
-            // string[] = a fixed array of strings 
-            // the {} initializer fills the array immediately after creation
-            // Why did we choose to use an array here instead of a list? Because our deck never needs to grow or shrink, it is fixed in size. 
-            // element 0 = "Ace", element 1 = "King",...element 12 = "2"
-            string[] deck = { "Ace", "King", "Queen", "Jack",
-                               "10",  "9",    "8",     "7",
-                               "6",   "5",    "4",     "3",  "2" };
+            // STEP 5 = BUILD AND SHUFFLE THE DECK
+            // BuildDeck() creates all 52 cards - 13 values x 4 suits
+            // ShuffleDeck() randomizes the order using Fisher-Yates algorithm
+            // the deck is built once per session and dealt from throughout
+            // DealCard() automatically reshuffles when the deck runs low
+
+            List<Card> deck = BuildDeck();
+            ShuffleDeck(deck);
 
             // STEP 6 = SESSION LOOP
             // outer loop = keeps the session alive across multiple hands
@@ -810,22 +830,21 @@ namespace AlexThomasBlackJackProject2026
                 // this is critical for realistic gameplay - the player makes decisions based on
                 // their own hand and only ONE dealer card, not the dealer's full total
 
+                // REMOVED: Draw(deck) + SuitAssigner have been replaced by the card distribution system built in Phase 3
+
                 // PLAYER'S TWO STARTING CARDS
-                string openCard1 = Draw(deck);
-                string openSuit1 = SuitAssigner();
-                string openCard2 = Draw(deck);
-                string openSuit2 = SuitAssigner();
+                Card openCard1 = DealCard(deck);
+                Card openCard2 = DealCard(deck);
 
-                int openValue1 = cardValues[openCard1];
-                int openValue2 = cardValues[openCard2];
+                int openValue1 = cardValues[openCard1.Name];
+                int openValue2 = cardValues[openCard2.Name];
 
-                if (openCard1 == "Ace") playerAces++;
-                if (openCard2 == "Ace") playerAces++;
+                if (openCard1.Name == "Ace") playerAces++;
+                if (openCard2.Name == "Ace") playerAces++;
 
                 playerTotal = openValue1 + openValue2;
 
                 // SOFT ACE ADJUSTMENT FOR OPENING HAND
-                // if two Aces = 22, drop one to 1 = total becomes 12
                 while (playerTotal > 21 && playerAces > 0)
                 {
                     playerTotal -= 10;
@@ -833,25 +852,18 @@ namespace AlexThomasBlackJackProject2026
                 }
 
                 // DEALER'S TWO STARTING CARDS
-                // first card = visible to the player
-                // second card = hole card = hidden until dealer's turn
-                string dealerVisibleCard = Draw(deck);
-                string dealerVisibleSuit = SuitAssigner();
-                string dealerHoleCard = Draw(deck);
-                string dealerHoleSuit = SuitAssigner();
+                Card dealerVisibleCard = DealCard(deck);
+                Card dealerHoleCard = DealCard(deck);
 
-                int dealerVisibleValue = cardValues[dealerVisibleCard];
-                int dealerHoleValue = cardValues[dealerHoleCard];
+                int dealerVisibleValue = cardValues[dealerVisibleCard.Name];
+                int dealerHoleValue = cardValues[dealerHoleCard.Name];
 
-                // track Aces in dealer's starting hand for soft Ace handling later
                 int dealerAcesStart = 0;
-                if (dealerVisibleCard == "Ace") dealerAcesStart++;
-                if (dealerHoleCard == "Ace") dealerAcesStart++;
+                if (dealerVisibleCard.Name == "Ace") dealerAcesStart++;
+                if (dealerHoleCard.Name == "Ace") dealerAcesStart++;
 
-                // dealer total starts with BOTH cards but player only sees one
                 dealerTotal = dealerVisibleValue + dealerHoleValue;
 
-                // SOFT ACE ADJUSTMENT FOR DEALER OPENING HAND
                 while (dealerTotal > 21 && dealerAcesStart > 0)
                 {
                     dealerTotal -= 10;
@@ -875,14 +887,13 @@ namespace AlexThomasBlackJackProject2026
 
                 // show dealer's visible card only - hole card stays hidden
                 Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine("Dealer showing: " + dealerVisibleCard + " of " + dealerVisibleSuit);
+                Console.WriteLine("Dealer showing: " + dealerVisibleCard);
                 Console.WriteLine("Dealer hole card: [hidden]\n");
                 Console.ResetColor();
 
                 // show player's two starting cards
                 Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine("You were dealt: " + openCard1 + " of " + openSuit1 +
-                                  " and " + openCard2 + " of " + openSuit2);
+                Console.WriteLine("You were dealt: " + openCard1 + " and " + openCard2);
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("Your total:     " + playerTotal + "\n");
                 Console.ResetColor();
@@ -896,19 +907,42 @@ namespace AlexThomasBlackJackProject2026
                     Console.WriteLine("BLACKJACK! You hit 21 on the deal!\n");
                     Console.ResetColor();
 
-                    // reveal dealer hole card before determining result
-                    // even on an opening Blackjack the dealer's full hand matters
-                    // if dealer also has 21 it is a tie, not a player win
+                    // reveal the hole card before dealer draws
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     Console.WriteLine("── Dealer's turn ──────────────────────");
                     Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard +
-                                      " of " + dealerHoleSuit);
+                    Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
                     Console.ForegroundColor = ConsoleColor.Yellow;
                     Console.WriteLine("Dealer total: " + dealerTotal + "\n");
                     Console.ResetColor();
 
-                    // determine result
+                    // dealer must still draw to 17 even when player has Blackjack
+                    // the dealer does not concede early - house rules require drawing to 17
+                    // if dealer also reaches 21 it becomes a tie, not a player win
+                    int openingDealerAces = dealerAcesStart;
+                    while (dealerTotal < 17)
+                    {
+                        Card dealerCard = DealCard(deck);
+                        int dealerCardValue = cardValues[dealerCard.Name];
+                        if (dealerCard.Name == "Ace") openingDealerAces++;
+
+                        dealerTotal += dealerCardValue;
+
+                        // soft Ace adjustment
+                        while (dealerTotal > 21 && openingDealerAces > 0)
+                        {
+                            dealerTotal -= 10;
+                            openingDealerAces--;
+                        }
+
+                        Console.ForegroundColor = ConsoleColor.White;
+                        Console.WriteLine("Dealer drew:  " + dealerCard);
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                        Console.ResetColor();
+                    }
+
+                    // determine result after dealer has finished drawing
                     string openingResult = DetermineWinner(playerTotal, dealerTotal);
 
                     Console.ForegroundColor = ConsoleColor.White;
@@ -1152,12 +1186,9 @@ namespace AlexThomasBlackJackProject2026
                             Console.ResetColor();
 
                             // deal exactly one more card
-                            string doubleCard = Draw(deck);
-                            string doubleSuit = SuitAssigner();
-                            int doubleValue = cardValues[doubleCard];
-
-                            if (doubleCard == "Ace") playerAces++;
-                            playerTotal += doubleValue;
+                            Card doubleCard = DealCard(deck);
+                            int doubleValue = cardValues[doubleCard.Name];
+                            if (doubleCard.Name == "Ace") playerAces++;
 
                             // soft Ace adjustment
                             while (playerTotal > 21 && playerAces > 0)
@@ -1167,7 +1198,7 @@ namespace AlexThomasBlackJackProject2026
                             }
 
                             Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine("You drew:   " + doubleCard + " of " + doubleSuit);
+                            Console.WriteLine("You drew:   " + doubleCard);
                             Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.WriteLine("Your total: " + playerTotal + "\n");
                             Console.ResetColor();
@@ -1185,19 +1216,12 @@ namespace AlexThomasBlackJackProject2026
                         numberOfDraws++;
 
                         // PLAYER DRAWS
-                        // Draw(deck) returns one randomly selected card name as a string
-                        // stored in playerCard so we can use it twice: once to look up the value, once to print it
-                        string playerCard = Draw(deck);
-                        string playerSuit = SuitAssigner();
 
-                        // REMOVED: If/Else Chain
-                        // cardValues[playerCard] looks up the point value in one line
-                        // the Dictionary was declared at the top of BlackjackGame
-                        int playerCardValue = cardValues[playerCard];
-
+                        Card playerCard = DealCard(deck);
+                        int playerCardValue = cardValues[playerCard.Name];
                         // track Aces separately for soft Ace handling
-                        // Ace is always added as 11 first, then dropped to 1 if needed
-                        if (playerCard == "Ace") playerAces++;
+                        if (playerCard.Name == "Ace") playerAces++;
+
 
                         playerTotal += playerCardValue;
                         // += adds the card value to the running total
@@ -1219,7 +1243,7 @@ namespace AlexThomasBlackJackProject2026
                         // print the card and total ONCE right after the draw
                         // the duplicate in the original was caused by printing here AND again after the strategy warning
                         Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine("You drew:     " + playerCard + " of " + playerSuit);
+                        Console.WriteLine("You drew:     " + playerCard);
                         Console.ForegroundColor = ConsoleColor.Yellow;
                         Console.WriteLine("Your total:   " + playerTotal + "\n");
                         Console.ResetColor();
@@ -1277,7 +1301,9 @@ namespace AlexThomasBlackJackProject2026
 
                     if (gameOver && sessionActive)
                     {
+
                         // DEALER DRAWING PHASE
+
                         // runs once after the player's turn is completely finished
                         // dealer follows forced rules: hit on 16 or lower, stand on 17 or higher
                         // player busts skip this because result is already determined
@@ -1305,24 +1331,16 @@ namespace AlexThomasBlackJackProject2026
 
                             // reveal the hole card now that the player's turn is over
                             Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard +
-                                              " of " + dealerHoleSuit);
+                            Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
                             Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.WriteLine("Dealer total: " + dealerTotal + "\n");
                             Console.ResetColor();
 
                             while (dealerTotal < 17)
                             {
-                                string dealerCard = Draw(deck);
-                                string dealerSuit = SuitAssigner();
-
-                                // REMOVED: If/Else Chain
-                                // Dictionary lookup - same pattern as player draw above
-                                int dealerCardValue = cardValues[dealerCard];
-
-                                // if this card is an Ace, count it as 11 for now
-                                // and track that we have another Ace counted as 11
-                                if (dealerCard == "Ace") dealerAces++;
+                                Card dealerCard = DealCard(deck);
+                                int dealerCardValue = cardValues[dealerCard.Name];
+                                if (dealerCard.Name == "Ace") dealerAces++;
 
                                 dealerTotal += dealerCardValue;
 
@@ -1341,7 +1359,7 @@ namespace AlexThomasBlackJackProject2026
                                 }
 
                                 Console.ForegroundColor = ConsoleColor.White;
-                                Console.WriteLine("Dealer drew:  " + dealerCard + " of " + dealerSuit);
+                                Console.WriteLine("Dealer drew:  " + dealerCard);
                                 Console.ForegroundColor = ConsoleColor.Yellow;
                                 Console.WriteLine("Dealer total: " + dealerTotal + "\n");
                                 Console.ResetColor();
@@ -1352,7 +1370,7 @@ namespace AlexThomasBlackJackProject2026
                             // result determination below handles both cases correctly
                         }
 
-                        // REMOVED: If/Else Chain
+                    
                         // DetermineWinner() extracts the result logic into its own method
                         // takes both totals, returns "Win", "Loss", or "Tie"
                         // the logic itself lives in the method above Main()
