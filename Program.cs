@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Data.SQLite;
+
 
 
 namespace AlexThomasBlackJackProject2026
@@ -83,6 +85,7 @@ namespace AlexThomasBlackJackProject2026
         public string StrategyMode;
         public bool OverrodeSuggestion;
     }
+
     public class GameStats
     {
         // Game results tracking 
@@ -368,9 +371,13 @@ namespace AlexThomasBlackJackProject2026
         // Order Matters: most specific cases come first so that they aren't missed by more general conditions being placed at the start 
         static string DetermineWinner(int playerTotal, int dealerTotal)
         {
+            if (playerTotal == 21 && dealerTotal == 21) return "Tie";
+            // both hit 21 = push - must come before the individual 21 checks below
+            // without this the player 21 check would fire first and incorrectly return Win
+
             if (playerTotal > 21 && dealerTotal > 21) return "Tie";
             // both bust = tie - most specific case, must come first
-            // if this wasn't first, the general bust checks below would catch it incorrectly
+            // if this wasn't close to the top, the general bust checks below would catch it incorrectly
 
             if (playerTotal == 21) return "Win";
             // player hit exactly 21 - Blackjack
@@ -490,8 +497,6 @@ namespace AlexThomasBlackJackProject2026
             // the Players table will have a UNIQUE constraint on the Username column
             // which means the database itself will reject duplicate usernames at the INSERT level
             // for now the CSV version operates on trust - whoever types a username gets that balance
-
-
 
             // STEP 3 = AGE VERIFICATION
             // player enters their full date of birth for verification purposes only
@@ -1255,7 +1260,7 @@ namespace AlexThomasBlackJackProject2026
                         // if player busted, dealer wins regardless - no need to draw
                         {
                             Console.ForegroundColor = ConsoleColor.Cyan;
-                            Console.WriteLine("── Dealer's turn ──────────────────────");
+                            Console.WriteLine("\n── Dealer's turn ──────────────────────");
                             Console.ResetColor();
 
                             // dealer already has one visible card from the start of the hand
