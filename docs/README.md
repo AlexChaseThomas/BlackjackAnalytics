@@ -179,4 +179,4 @@ Built by Alex Thomas — analytics-oriented builder with a background in operati
 
 ---
 
-*This project is actively being developed. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's coming next.*
+*This project is actively being developed. See [`docs/ROADMAP.md`](/docs/ROADMAP.md) for what's coming next.*
