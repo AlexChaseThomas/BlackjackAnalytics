@@ -298,26 +298,25 @@ Make the repository presentation-ready for recruiters, hiring managers, and tech
 
 ## 💡 FUTURE IDEAS (not yet scoped)
 
-Blazor WebAssembly front end — game playable in browser, increases recruiter accessibility significantly
-Split hands mechanic — adds another betting behavior data point, makes game more realistic
-Card counting detection — track running count, analyze whether count correlates with player decisions
-Multi-game casino platform — shared core library, add Poker, Craps, Roulette as separate games
-Leaderboard — SELECT + ORDER BY on TokensAfter, simple SQL feature, good dashboard visual
-Achievement system — query-based, no schema change needed
-Context-aware strategy suggestions — factor in dealer visible card, closer to real basic strategy tables
-Soft 17 dealer rule option — some casinos hit on soft 17, configurable option, interesting analytics variable
-Azure or cloud deployment — host the database in the cloud, real multi-user capability
+- Blazor WebAssembly front end — game playable in browser, increases recruiter accessibility significantly
+- Split hands mechanic — adds another betting behavior data point, makes game more realistic
+- Card counting detection — track running count, analyze whether count correlates with player decisions
+- Multi-game casino platform — shared core library, add Poker, Craps, Roulette as separate games
+- Leaderboard — SELECT + ORDER BY on TokensAfter, simple SQL feature, good dashboard visual
+- Achievement system — query-based, no schema change needed
+- Context-aware strategy suggestions — factor in dealer visible card, closer to real basic strategy tables
+- Soft 17 dealer rule option — some casinos hit on soft 17, configurable option, interesting analytics variable
+- Azure or cloud deployment — host the database in the cloud, real multi-user capability
 
 ---
 
 ## MILESTONE SUMMARY
 
-Phase 1 complete — DONE — Stable game engine, CSV persistence
-Phase 2 complete — DONE — Username system, deal order, double down
-Phase 3 complete — IN PROGRESS — 52-card deck, game polish, SQLite integration
-Phase 4 complete — PLANNED — Python analysis scripts
-Phase 5 complete — PLANNED — Power BI dashboard
-Portfolio ready  — PLANNED — GitHub polished, LinkedIn updated
+- Phase 1 complete — DONE — Stable game engine, CSV persistence
+- Phase 2 complete — DONE — Username system, deal order, double down
+- Phase 3 complete — IN PROGRESS — 52-card deck, game polish, SQLite integration
+- Phase 4 complete — PLANNED — Python analysis scripts
+- Phase 5 complete — PLANNED — Power BI dashboard
 
 ---
 
