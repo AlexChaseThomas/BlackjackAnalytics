@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Data.SQLite;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 
 
@@ -230,6 +232,74 @@ namespace AlexThomasBlackJackProject2026
             // Math.Round() rounds to the nearest whole number 
             // returned as a string so it prints cleanly e.g. "77%"
         }   // closes CalculateBustChance
+
+        // METHOD: Initialize Database = creates the SQLite database file and both tables on the first run 
+        // IF NOT EXISTS means this is safe to call every time the program starts
+        // if the tables already exist = nothing happens = no data lost
+        static void InitializeDatabase(string dbPath)
+        {
+           // SQLiteConnection = the bridge between C# and the SQLite database file
+           // "Data Source=" tells SQLite where the .db file lives 
+           // using statement = connection closes automatically when the block finishes 
+           using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            {
+                connection.Open(); // establish the connection to the database = nothing can happen until this is called 
+
+                // SQLiteCommand = a SQL statement that runs against the open connection.
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    // CREATE TABLE: Players = stores identity & current token balance 
+                    // Username = UNIQUE (database enforces no duplicates)
+                    // REPLACES: CSV-based username 'trust' system from Phase 2
+
+                    // @" = verbatim string literal = lets the string span multiple lines without needing special characters = formatting convenience that makes SQL readable
+                    cmd.CommandText = @" 
+                        CREATE TABLE IF NOT EXISTS Players (
+                            PlayerID INTEGER PRIMARY KEY AUTOINCREMENT,
+                            Username TEXT UNIQUE NOT NULL,
+                            PlayerAge INTEGER, 
+                            FirstSeen TEXT,
+                            LastSeen TEXT,
+                            TokenBalance INTEGER
+                    )";
+                    // normalization = the identity data (players) lives in one place and the hand data references it by username (GameSessions)
+                    // AUTOINCREMENT = the database automatically assigns a unique number to each new row (PlayerID 1, PlayerID 2, ...etc)
+                    cmd.ExecuteNonQuery();
+                    // ExecutionNonQuery = runs an SQL statement that does not return rows = used for CREATE, INSERT, UPDATE, DELETE
+                    // Returns = # of rows affected (ignore it here)
+
+                    // CREATE TABLE: GameSessions = One Row Per Hand Played
+                    // username = Foreign Key linking back to the Players table 
+                    // NORMALIZED STRUCTURE 
+                    cmd.CommandText = @"
+                        CREATE TABLE IF NOT EXISTS GameSessions (
+                            RecordID           INTEGER PRIMARY KEY AUTOINCREMENT, 
+                            SessionID          INTEGER,
+                            Username           TEXT    REFERENCES Players(Username),
+                            PlayerAge          INTEGER,
+                            LoginTime          TEXT,
+                            GameNumber         INTEGER,
+                            PlayerTotal        INTEGER,
+                            DealerTotal        INTEGER,
+                            Result             TEXT,
+                            PlayerBusted       INTEGER,
+                            DealerBusted       INTEGER,
+                            NumberOfDraws      INTEGER,
+                            BetAmount          INTEGER,
+                            TokensBefore       INTEGER,
+                            TokensAfter        INTEGER,
+                            StrategyMode       TEXT,
+                            OverrodeSuggestion INTEGER,
+                            DoubledDown        INTEGER
+                        )";
+                    cmd.ExecuteNonQuery();
+                    // PlayerBusted, DealerBusted, OverrodeSuggestion, DoubledDown = stored as INTEGER (0 or 1) because SQLite has no bool type
+                    // 0 = false, 1 = true - we handle the conversion in C#
+
+
+                }
+            }
+        } // closes InitializeDatabase
 
         // METHOD: LoadPlayerBalance
         // reads the CSV to find the last recorded token balance for this player
@@ -605,6 +675,14 @@ namespace AlexThomasBlackJackProject2026
             // ***** CSV will always appear right next to the .exe file *****
             string csvPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blackjack_sessions.csv");
 
+            // database path - lives next to the .exe just like the CSV did
+            // Phase 3: SQLite replaces CSV as the primary data store
+            string dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blackjack.db");
+
+            // initialize the database - creates file and tables if they don't exist
+            // safe to call every run - IF NOT EXISTS prevents overwriting existing data
+            InitializeDatabase(dbPath);
+
             // create one GameStats instance for the whole session
             // every hand will update these counters + then they get printed at the end 
             GameStats stats = new GameStats();
@@ -859,10 +937,18 @@ namespace AlexThomasBlackJackProject2026
                     Console.WriteLine("BLACKJACK! You hit 21 on the deal!\n");
                     Console.ResetColor();
 
-                    // reveal the hole card before dealer draws
                     Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.WriteLine("── Dealer's turn ──────────────────────");
+                    Console.WriteLine("\n── Dealer's turn ──────────────────────");
+                    Console.ResetColor();
+
+                    while (Console.KeyAvailable) Console.ReadKey(true);
+
                     Console.ForegroundColor = ConsoleColor.White;
+                    Console.Write("Dealer revealing...");
+                    Thread.Sleep(1500);
+                    Console.SetCursorPosition(0, Console.CursorTop);
+                    Console.Write("                                        ");
+                    Console.SetCursorPosition(0, Console.CursorTop);
                     Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
                     Console.ForegroundColor = ConsoleColor.Yellow;
                     Console.WriteLine("Dealer total: " + dealerTotal + "\n");
@@ -959,7 +1045,7 @@ namespace AlexThomasBlackJackProject2026
                     {
                         Console.ForegroundColor = ConsoleColor.Yellow;
                         Console.WriteLine("─────────────────────────────────────");
-                        Console.WriteLine("Type your bet to continue, or type 'exit' to quit.");
+                        Console.WriteLine("Place a bet to continue, or type 'exit' to see your session summary.");
                         Console.ResetColor();
                     }
 
@@ -978,7 +1064,7 @@ namespace AlexThomasBlackJackProject2026
                     string bustChance = CalculateBustChance(playerTotal);
                     Console.ForegroundColor = ConsoleColor.Yellow;
                     Console.WriteLine("⚠  Strategy tip: your opening total is " + playerTotal + ".");
-                    Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
+                    Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.\n");
                     Console.ResetColor();
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     Console.WriteLine("   [ENTER] Hit anyway  [N] Stand  [D] Double Down  [ESC] Quit");
@@ -1256,19 +1342,47 @@ namespace AlexThomasBlackJackProject2026
 
                         // DEALER DRAWING PHASE
 
-                        // runs once after the player's turn is completely finished
-                        // dealer follows forced rules: hit on 16 or lower, stand on 17 or higher
-                        // player busts skip this because result is already determined
+                        // reveal the hole card before dealer draws
+                        Console.ForegroundColor = ConsoleColor.Cyan;
+                        Console.WriteLine("\n── Dealer's turn ──────────────────────");
+                        Console.ResetColor();
+
+                        // flush any buffered keypresses before the pause
+                        // without this a buffered N or Enter from the player's last action
+                        // gets consumed immediately and the pause fires too fast to see
+                        while (Console.KeyAvailable) Console.ReadKey(true);
+
+                        // prints the suspense line
+                        Console.ForegroundColor = ConsoleColor.White;
+                        Console.Write("Dealer revealing hole card...");
+
+                        // pause for dramatic effect
+                        Thread.Sleep(1500);
+
+                        // move cursor back to the start of this line
+                        Console.SetCursorPosition(0, Console.CursorTop);
+
+                        // overwrite with blank spaces to clear the old text
+                        // 40 spaces covers the full width of our UI
+                        Console.Write("                                        ");
+
+                        // move cursor back to start of line again
+                        Console.SetCursorPosition(0, Console.CursorTop);
+
+                        // now print the actual card reveal
+                        Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                        Console.ResetColor();
+
+
+                        // dealer draws only if player did not already bust
+                        // result is already determined on a bust - no need to draw
                         if (playerTotal <= 21)
                         // only run dealer logic if the player didn't already bust
                         // if player busted, dealer wins regardless - no need to draw
                         {
-                            Console.ForegroundColor = ConsoleColor.Cyan;
-                            Console.WriteLine("\n── Dealer's turn ──────────────────────");
-                            Console.ResetColor();
-
-                            // dealer already has one visible card from the start of the hand
-                            // dealer now continues drawing until reaching 17 or higher
+                          
 
                             // dealerAces tracks how many Aces are currently being counted as 11
                             // this allows soft Ace handling - if the dealer busts and has an Ace
@@ -1281,13 +1395,10 @@ namespace AlexThomasBlackJackProject2026
                             // we use it as the starting Ace count for the dealer draw phase
                             int dealerAces = dealerAcesStart;
 
-                            // reveal the hole card now that the player's turn is over
-                            Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
-                            Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("Dealer total: " + dealerTotal + "\n");
-                            Console.ResetColor();
 
+
+                            // dealer already has one visible card from the start of the hand
+                            // dealer now continues drawing until reaching 17 or higher
                             while (dealerTotal < 17)
                             {
                                 Card dealerCard = DealCard(deck);
