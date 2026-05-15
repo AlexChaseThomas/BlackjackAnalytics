@@ -133,7 +133,7 @@ I am self-taught on most of what is in this project. I identified what I needed 
 
 ## Key engineering decisions
 
-A full log of every architectural decision, bug fix, and design choice is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md). A few highlights:
+A full log of every architectural decision, bug fix, and design choice is in [`docs/CHANGELOG.md`](/docs/CHANGELOG.md). A few highlights:
 
 **Privacy by design** — The game collects a date of birth for age verification (21+ restriction) but immediately discards it after calculating the player's age. Only an integer age is stored. No real names, no full birthdates, no PII in the database.
 
