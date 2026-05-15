@@ -1376,64 +1376,33 @@ namespace AlexThomasBlackJackProject2026
                         Console.ResetColor();
 
 
-                        // dealer draws only if player did not already bust
-                        // result is already determined on a bust - no need to draw
-                        if (playerTotal <= 21)
-                        // only run dealer logic if the player didn't already bust
-                        // if player busted, dealer wins regardless - no need to draw
+                        // dealer always draws to 17 regardless of whether player busted
+                        // this ensures DealerTotal in the CSV reflects the actual final hand
+                        // and matches real casino rules where the dealer always completes their hand
+                        int dealerAces = dealerAcesStart;
+
+                        while (dealerTotal < 17)
                         {
-                          
+                            Card dealerCard = DealCard(deck);
+                            int dealerCardValue = cardValues[dealerCard.Name];
+                            if (dealerCard.Name == "Ace") dealerAces++;
 
-                            // dealerAces tracks how many Aces are currently being counted as 11
-                            // this allows soft Ace handling - if the dealer busts and has an Ace
-                            // counted as 11, it drops to 1 instead (subtract 10 from total)
-                            // example: Ace + Ace = 11 + 11 = 22, drops to 11 + 1 = 12, keeps drawing
-                            // example: Ace + 6 = 17, stands (soft 17 rule - stands on all 17s here)
+                            dealerTotal += dealerCardValue;
 
-                            // dealerAcesStart was calculated when the opening hands were dealt
-                            // it already accounts for both the visible card and the hole card
-                            // we use it as the starting Ace count for the dealer draw phase
-                            int dealerAces = dealerAcesStart;
-
-
-
-                            // dealer already has one visible card from the start of the hand
-                            // dealer now continues drawing until reaching 17 or higher
-                            while (dealerTotal < 17)
+                            // soft Ace adjustment
+                            while (dealerTotal > 21 && dealerAces > 0)
                             {
-                                Card dealerCard = DealCard(deck);
-                                int dealerCardValue = cardValues[dealerCard.Name];
-                                if (dealerCard.Name == "Ace") dealerAces++;
-
-                                dealerTotal += dealerCardValue;
-
-                                // SOFT ACE ADJUSTMENT
-                                // if the dealer busted AND has at least one Ace counted as 11
-                                // drop one Ace from 11 to 1 by subtracting 10
-                                // this is standard blackjack Ace handling
-                                // keep doing this until either the total is <= 21 or no more soft Aces remain
-                                while (dealerTotal > 21 && dealerAces > 0)
-                                {
-                                    dealerTotal -= 10;
-                                    // subtract 10 = convert one Ace from 11 to 1
-                                    // 11 - 10 = 1, net effect is the Ace is now worth 1
-                                    dealerAces--;
-                                    // one fewer Ace is being counted as 11
-                                }
-
-                                Console.ForegroundColor = ConsoleColor.White;
-                                Console.WriteLine("Dealer drew:  " + dealerCard);
-                                Console.ForegroundColor = ConsoleColor.Yellow;
-                                Console.WriteLine("Dealer total: " + dealerTotal + "\n");
-                                Console.ResetColor();
+                                dealerTotal -= 10;
+                                dealerAces--;
                             }
 
-                            // dealer has finished drawing
-                            // dealerTotal is now either 17-21 (stood) or 22+ (bust)
-                            // result determination below handles both cases correctly
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine("Dealer drew:  " + dealerCard);
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                            Console.ResetColor();
                         }
 
-        
                         // DetermineWinner() extracts the result logic into its own method
                         // takes both totals, returns "Win", "Loss", or "Tie"
                         // the logic itself lives in the method above Main()
