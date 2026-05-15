@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Data.SQLite;
-using System.Runtime.InteropServices;
 using System.Threading;
 
 
@@ -107,9 +106,7 @@ namespace AlexThomasBlackJackProject2026
     class BlackjackGame // this type of class is only accessible within this file/namespace (default = "internal")
     {
         // Single shared Random instance for the entire class; declared at class level = all methods share it 
-        // ***** BUG RISK ***** 
-        // if two calls of the draw method happen close together in time, they can get the same seed and produce the same card twice in a row
-        // one shared instance eliminates that problem entirely
+  
         static Random rand = new Random();
 
         // DICTIONARY: cardValues = maps each card name to its point value 
@@ -445,18 +442,14 @@ namespace AlexThomasBlackJackProject2026
             // both hit 21 = push - must come before the individual 21 checks below
             // without this the player 21 check would fire first and incorrectly return Win
 
-            if (playerTotal > 21 && dealerTotal > 21) return "Tie";
-            // both bust = tie - most specific case, must come first
-            // if this wasn't close to the top, the general bust checks below would catch it incorrectly
+            if (playerTotal > 21) return "Loss";
+            // In real blackjack, when the player busts, they always lose - it doesn't matter if the dealer busts after - the house does not share the loss
 
             if (playerTotal == 21) return "Win";
             // player hit exactly 21 - Blackjack
 
             if (dealerTotal == 21) return "Loss";
             // dealer hit exactly 21 - dealer Blackjack
-
-            if (playerTotal > 21) return "Loss";
-            // player busted
 
             if (dealerTotal > 21) return "Win";
             // dealer busted
@@ -787,6 +780,7 @@ namespace AlexThomasBlackJackProject2026
                 int numberOfDraws = 0;
                 bool gameOver = false;
                 bool overrodeSuggestion = false;
+                bool warningActive = false;
                 int playerAces = 0;
 
                 // overrodeSuggestion declared here so it is accessible both in the draw branch where it gets set
@@ -1064,11 +1058,13 @@ namespace AlexThomasBlackJackProject2026
                     string bustChance = CalculateBustChance(playerTotal);
                     Console.ForegroundColor = ConsoleColor.Yellow;
                     Console.WriteLine("⚠  Strategy tip: your opening total is " + playerTotal + ".");
-                    Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.\n");
+                    Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
                     Console.ResetColor();
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     Console.WriteLine("   [ENTER] Hit anyway  [N] Stand  [D] Double Down  [ESC] Quit");
                     Console.ResetColor();
+                    // set warningActive so the first draw after this warning counts as an override
+                    warningActive = true;
                 }
 
                 numberOfDraws = 0;
@@ -1080,6 +1076,7 @@ namespace AlexThomasBlackJackProject2026
                 bool doubledDown = false;
                 // doubledDown tracks whether the player used double down this hand
                 // declared here so it is accessible both in the game loop and in the SessionRecord
+                
                 Console.ResetColor();
 
                 // STEP 7 = GAME LOOP (inner loop - one hand) 
@@ -1254,6 +1251,16 @@ namespace AlexThomasBlackJackProject2026
 
                         numberOfDraws++;
 
+                        // if a warning was active from the previous draw, this draw is an override
+                        // the player was warned and chose to draw anyway
+                        if (warningActive)
+                        {
+                            overrodeSuggestion = true;
+                            stats.SuggestionsOverridden++;
+                            warningActive = false;
+                            // reset warningActive - the override is recorded, warning consumed
+                        }
+
                         // PLAYER DRAWS
 
                         Card playerCard = DealCard(deck);
@@ -1315,19 +1322,13 @@ namespace AlexThomasBlackJackProject2026
                             Console.WriteLine("⚠  Strategy tip: your total is " + playerTotal + ".");
                             Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
                             Console.ResetColor();
-                            // reprint compact controls so player knows exactly what to press next
-                            // pressing Enter here will draw, N will stand, ESC will quit
                             Console.ForegroundColor = ConsoleColor.Cyan;
                             Console.WriteLine("   [ENTER] Draw anyway  [N] Stand  [ESC] Quit");
                             Console.ResetColor();
-                            // do not need to call ReadKey here - the game loop already reads the next keypress
-                            // the warning is purely informational, control returns to the game loop
-                            // player presses any key to acknowledge and move on
-                            overrodeSuggestion = true;
-                            // true = a warning was shown this hand
-                            // written to SessionRecord so we can analyze
-                            // whether warned players busted more or less
-                            stats.SuggestionsOverridden++;
+                            // warningActive = true means the next draw is an override
+                            // we do not set overrodeSuggestion here because the player
+                            // has not yet chosen to draw again - they may still stand
+                            warningActive = true;
                         }
 
                     }   // closes else (draw branch)
