@@ -37,25 +37,25 @@ Categories:
 ## VERSION HISTORY SUMMARY
 
 Version | Phase | Description | Date
-0.1 | Phase 1 | Initial game engine — college project base | May 2026
-0.2 | Phase 1 | Betting system, token economy, CSV persistence | May 2026
-0.3 | Phase 1 | Strategy mode, bust percentage warnings | May 2026
-0.4 | Phase 1 | Dealer AI fixes, hard 17 rule | May 2026
-0.5 | Phase 1 | Soft Ace handling for player and dealer | May 2026
-0.6 | Phase 1 | Stand-on-zero guard clause | May 2026
-1.0 | Phase 1 Complete | Stable game engine baseline committed to GitHub | May 2026
-1.1 | Phase 2 | Single shared Random instance | May 2026
-1.2 | Phase 2 | Dictionary replaces if/else card value chains | May 2026
-1.3 | Phase 2 | DetermineWinner() method extracted | May 2026
-1.4 | Phase 2 | Username system, PII removal, password gate removed | May 2026
-1.5 | Phase 2 | Proper blackjack deal order, hole card, double down | May 2026
-1.6 | Phase 2 | UI fixes — strategy warnings, play again flow | May 2026
-2.0 | Phase 2 Complete | Full Phase 2 committed to GitHub | May 2026
-2.1 | Phase 3 | 52-card deck, Fisher-Yates shuffle, Card class | May 2026
-2.2 | Phase 3 | Game engine bug fixes — dealer, bust rules, overrides | May 2026
-2.3 | Phase 3 | UI polish — dealer reveal pause, animations, prompts | May 2026
-2.4 | Phase 3 | SQLite schema design, InitializeDatabase() | May 2026
-3.0 | Phase 3 Complete | In progress | May 2026
+- 0.1 | Phase 1 | Initial game engine — college project base | May 2026
+- 0.2 | Phase 1 | Betting system, token economy, CSV persistence | May 2026
+- 0.3 | Phase 1 | Strategy mode, bust percentage warnings | May 2026
+- 0.4 | Phase 1 | Dealer AI fixes, hard 17 rule | May 2026
+- 0.5 | Phase 1 | Soft Ace handling for player and dealer | May 2026
+- 0.6 | Phase 1 | Stand-on-zero guard clause | May 2026
+- 1.0 | Phase 1 Complete | Stable game engine baseline committed to GitHub | May 2026
+- 1.1 | Phase 2 | Single shared Random instance | May 2026
+- 1.2 | Phase 2 | Dictionary replaces if/else card value chains | May 2026
+- 1.3 | Phase 2 | DetermineWinner() method extracted | May 2026
+- 1.4 | Phase 2 | Username system, PII removal, password gate removed | May 2026
+- 1.5 | Phase 2 | Proper blackjack deal order, hole card, double down | May 2026
+- 1.6 | Phase 2 | UI fixes — strategy warnings, play again flow | May 2026
+- 2.0 | Phase 2 Complete | Full Phase 2 committed to GitHub | May 2026
+- 2.1 | Phase 3 | 52-card deck, Fisher-Yates shuffle, Card class | May 2026
+- 2.2 | Phase 3 | Game engine bug fixes — dealer, bust rules, overrides | May 2026
+- 2.3 | Phase 3 | UI polish — dealer reveal pause, animations, prompts | May 2026
+- 2.4 | Phase 3 | SQLite schema design, InitializeDatabase() | May 2026
+- 3.0 | Phase 3 Complete | In progress | May 2026
 
 ---
 
