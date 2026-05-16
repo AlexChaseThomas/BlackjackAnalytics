@@ -727,19 +727,28 @@ namespace AlexThomasBlackJackProject2026
             Console.WriteLine("╔══════════════════════════════════════╗");
             Console.WriteLine("║       BASIC STRATEGY MODE            ║");
             Console.WriteLine("╠══════════════════════════════════════╣");
+
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("║  ON  = suggestions shown during play ║");
-            Console.WriteLine("║  OFF = no suggestions                ║");
+            Console.WriteLine("║  Get live blackjack suggestions      ║");
+            Console.WriteLine("║  during gameplay.                    ║");
+
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("╠══════════════════════════════════════╣");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("║  [1] ON  - enable suggestions        ║");
+
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("║  [2] OFF - no strategy assistance    ║");
+
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("╚══════════════════════════════════════╝");
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Press S for suggestions ON, any other key for OFF.");
             Console.ResetColor();
 
             ConsoleKeyInfo strategyKey = Console.ReadKey(true);
-            bool strategyOn = strategyKey.Key == ConsoleKey.S;
-            // strategyOn = true if they pressed S, false for anything else
-            // this single bool controls all strategy logic for the whole session
+            bool strategyOn = strategyKey.Key == ConsoleKey.D1 || strategyKey.Key == ConsoleKey.NumPad1;
+            // D1 = the 1 key on the main keyboard, NumPad1 = the 1 key on the number pad
+            // either 1 key turns suggestions ON, anything else turns them OFF
 
             stats.StrategyModeOn = strategyOn;
             // store the choice in GameStats so it appears in the end of session summary
@@ -787,9 +796,6 @@ namespace AlexThomasBlackJackProject2026
                 // playerAces tracks how many Aces in the player's hand are currently counted as 11
                 // used for soft Ace handling - if the player draws and busts but has a soft Ace,
                 // the Ace drops from 11 to 1 instead of causing an immediate bust
-
-                stats.TotalGames++;
-                // incremented here so the game number is correct from the first hand
 
                 // BETTING PROMPT = player must bet BEFORE seeing their cards
                 // minimum of 5 tokens, maximum of 100 tokens, cannot exceed their balance
@@ -841,6 +847,9 @@ namespace AlexThomasBlackJackProject2026
                 // if the player typed "exit" during betting, stop here
                 // do not deal cards or enter the game loop
                 if (!sessionActive) break;
+
+                stats.TotalGames++;
+                // incremented AFTER exit check so typing exit does not count as a hand
 
                 int tokensBefore = tokenBalance;
                 // snapshot of the balance BEFORE this hand starts
