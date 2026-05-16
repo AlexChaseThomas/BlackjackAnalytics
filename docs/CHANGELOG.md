@@ -438,18 +438,18 @@ Version | Phase | Description | Date
 
 # KNOWN LIMITATIONS AND TECHNICAL DEBT
 
-Item | Phase introduced | Planned resolution
-Username uniqueness not enforced | Phase 2 | Phase 3 — SQL UNIQUE constraint
-ESC during betting requires typing exit | Phase 2 | Phase 3 — ReadKey betting flow
-Recursive Main() for play again | Phase 2 | Phase 3 — top-level game loop
-CSV still active in parallel | Phase 3 | Phase 3 — deleted after SQLite complete
-CalculateBustChance uses parallel arrays | Phase 1 | Phase 3 — replace with Dictionary
-No running hand display | Phase 1 | Phase 3 — show all cards held
-Soft Ace not visually indicated | Phase 1 | Phase 3 — show Ace counting as 1
-Username allows spaces | Phase 2 | Phase 3 — add space validation
-No card counting / deck depletion | Phase 1 | Future feature — multi-deck tracking
-Strategy suggestions not context-aware | Phase 1 | Future feature — dealer card factored in
-Split hands not implemented | Phase 2 | Future feature — post-Phase 3
+- Item | Phase introduced | Planned resolution
+- Username uniqueness not enforced | Phase 2 | Phase 3 — SQL UNIQUE constraint
+- ESC during betting requires typing exit | Phase 2 | Phase 3 — ReadKey betting flow
+- Recursive Main() for play again | Phase 2 | Phase 3 — top-level game loop
+- CSV still active in parallel | Phase 3 | Phase 3 — deleted after SQLite complete
+- CalculateBustChance uses parallel arrays | Phase 1 | Phase 3 — replace with Dictionary
+- No running hand display | Phase 1 | Phase 3 — show all cards held
+- Soft Ace not visually indicated | Phase 1 | Phase 3 — show Ace counting as 1
+- Username allows spaces | Phase 2 | Phase 3 — add space validation
+- No card counting / deck depletion | Phase 1 | Future feature — multi-deck tracking
+- Strategy suggestions not context-aware | Phase 1 | Future feature — dealer card factored in
+- Split hands not implemented | Phase 2 | Future feature — post-Phase 3
 
 ---
 
