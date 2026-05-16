@@ -584,10 +584,10 @@ namespace AlexThomasBlackJackProject2026
             // prevents duplicate accounts from different capitalizations
 
             // username validation - must be between 3 and 20 characters
-            while (player.Username.Length < 3 || player.Username.Length > 20)
+            while (player.Username.Length < 3 || player.Username.Length > 20 || player.Username.Contains(" "))
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Username must be between 3 and 20 characters. Try again.");
+                Console.WriteLine("Username must be between 3 and 20 characters and contain no spaces. Try again.");
                 Console.ResetColor();
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.Write("Enter your username: ");
