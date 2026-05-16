@@ -1092,8 +1092,10 @@ namespace AlexThomasBlackJackProject2026
                     }
                     else
                     {
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.WriteLine("\n══════════════════════════════════════");
+                        Console.ResetColor();
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("─────────────────────────────────────");
                         Console.WriteLine("Place a bet to continue, or type 'exit' to see your session summary.");
                         Console.ResetColor();
                     }
@@ -1187,8 +1189,10 @@ namespace AlexThomasBlackJackProject2026
                     }
                     else
                     {
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.WriteLine("\n══════════════════════════════════════");
+                        Console.ResetColor();
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("─────────────────────────────────────");
                         Console.WriteLine("Place a bet to continue, or type 'exit' to see your session summary.");
                         Console.ResetColor();
                     }
@@ -1226,6 +1230,11 @@ namespace AlexThomasBlackJackProject2026
                 // declared here so it is accessible both in the game loop and in the SessionRecord
                 
                 Console.ResetColor();
+
+                // flush any keypresses buffered during the dealer reveal or animations
+                // without this a buffered Enter from watching the dealer draw
+                // gets consumed instantly as a hit on the next hand
+                while (Console.KeyAvailable) Console.ReadKey(true);
 
                 // STEP 7 = GAME LOOP (inner loop - one hand) 
                 // Lives INSIDE the session loop
@@ -1466,9 +1475,12 @@ namespace AlexThomasBlackJackProject2026
                             }
                             else if (playerTotal > 21)
                             {
-                                // player busted - hand ends immediately
-                                // no strategy warning needed since no further draw is possible
-                                gameOver = true;
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Bust! You went over 21.\n");
+                            Console.ResetColor();
+                            // player busted - hand ends immediately
+                            // no strategy warning needed since no further draw is possible
+                            gameOver = true;
                             }
 
                             // STRATEGY WARNING: HIGH DRAW
@@ -1679,8 +1691,10 @@ namespace AlexThomasBlackJackProject2026
                         // this blends two prompts into one natural flow
                         if (sessionActive)
                         {
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.WriteLine("\n══════════════════════════════════════");
+                            Console.ResetColor();
                             Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("─────────────────────────────────────");
                             Console.WriteLine("Place a bet to continue, or type 'exit' to see your session summary.");
                             Console.ResetColor();
                         }
@@ -1708,6 +1722,8 @@ namespace AlexThomasBlackJackProject2026
             Console.WriteLine("Wins                     : " + stats.PlayerWins);
             Console.WriteLine("Losses                   : " + stats.DealerWins);
             Console.WriteLine("Ties                     : " + stats.Ties);
+            Console.WriteLine("Player busts             : " + stats.PlayerBusts);
+            Console.WriteLine("Dealer busts             : " + stats.DealerBusts);
             Console.WriteLine("Full data saved to       : " + csvPath + "\n");
             Console.ResetColor();
 
