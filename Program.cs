@@ -514,6 +514,39 @@ namespace AlexThomasBlackJackProject2026
             }   // StreamWriter closes and saves automatically here
         }   // closes WriteRecordToCSV
 
+        // METHOD: PrintPlayerHand = prints all cards in the player's current hand 
+        // Method gets called after every draw so that the player can always view their full hand
+        static void PrintPlayerHand(List<Card> hand)
+        {
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write("Your hand:  ");
+            for (int i = 0; i < hand.Count; i++)
+            {
+                Console.Write(hand[i].ToString());
+                if (i < hand.Count - 1)
+                    Console.Write("  |  ");
+            }
+            Console.WriteLine();
+            Console.ResetColor();
+        }   // closes PrintPlayerHand
+
+        // METHOD: PrintDealerHand = prints all cards in the dealer's current
+        // Method gets called after a hole card reveal and after each dealer draw
+        static void PrintDealerHand(List<Card> hand)
+        {
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write("Dealer hand: ");
+            for (int i = 0; i < hand.Count;i++)
+            {
+                Console.Write(hand[i].ToString());
+                if (i < hand.Count - 1)
+                    Console.Write(" | ");
+
+            }
+            Console.WriteLine();
+            Console.ResetColor();
+        } // closes PrintDealerHand
+
         static void Main() // This is the entry point of every C# program, when you run your program, C# scans your code looking specifically for a method called Main (C# STARTS EXECUTING HERE)
         {
             // STEP 1 = WELCOME SCREEN
@@ -788,7 +821,12 @@ namespace AlexThomasBlackJackProject2026
                 bool gameOver = false;
                 bool overrodeSuggestion = false;
                 bool warningActive = false;
+                bool lowStandWarningShown = false;
                 int playerAces = 0;
+                List<Card> playerHand = new List<Card>();
+                // stores every card the player has been dealt this hand = used to print the full hand display after each draw
+                List<Card> dealerHand = new List<Card>();
+                // stores every card the dealer has been dealt this hand
 
                 // overrodeSuggestion declared here so it is accessible both in the draw branch where it gets set
                 // AND outside the draw branch where it gets written to the SessionRecord
@@ -867,6 +905,10 @@ namespace AlexThomasBlackJackProject2026
                 Card openCard1 = DealCard(deck);
                 Card openCard2 = DealCard(deck);
 
+                playerHand.Add(openCard1);
+                playerHand.Add(openCard2);
+                // add player's two starting cards to the playerHand list = used for displaying cards
+
                 int openValue1 = cardValues[openCard1.Name];
                 int openValue2 = cardValues[openCard2.Name];
 
@@ -885,6 +927,8 @@ namespace AlexThomasBlackJackProject2026
                 // DEALER'S TWO STARTING CARDS
                 Card dealerVisibleCard = DealCard(deck);
                 Card dealerHoleCard = DealCard(deck);
+                dealerHand.Add(dealerVisibleCard);
+                dealerHand.Add(dealerHoleCard);
 
                 int dealerVisibleValue = cardValues[dealerVisibleCard.Name];
                 int dealerHoleValue = cardValues[dealerHoleCard.Name];
@@ -923,10 +967,9 @@ namespace AlexThomasBlackJackProject2026
                 Console.ResetColor();
 
                 // show player's two starting cards
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine("You were dealt: " + openCard1 + " and " + openCard2);
+                PrintPlayerHand(playerHand);
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("Your total:     " + playerTotal + "\n");
+                Console.WriteLine("Your total:   " + playerTotal + "\n");
                 Console.ResetColor();
 
                 // check if player got blackjack on the opening deal
@@ -950,9 +993,10 @@ namespace AlexThomasBlackJackProject2026
                     Console.SetCursorPosition(0, Console.CursorTop);
                     Console.Write("                                        ");
                     Console.SetCursorPosition(0, Console.CursorTop);
-                    Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
+                    Console.WriteLine("\nDealer reveals hole card: " + dealerHoleCard);
+                    PrintDealerHand(dealerHand);
                     Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                    Console.WriteLine("\nDealer total: " + dealerTotal + "\n");
                     Console.ResetColor();
 
                     // dealer must still draw to 17 even when player has Blackjack
@@ -961,6 +1005,7 @@ namespace AlexThomasBlackJackProject2026
                     int openingDealerAces = dealerAcesStart;
                     while (dealerTotal < 17)
                     {
+
                         Card dealerCard = DealCard(deck);
                         int dealerCardValue = cardValues[dealerCard.Name];
                         if (dealerCard.Name == "Ace") openingDealerAces++;
@@ -974,11 +1019,14 @@ namespace AlexThomasBlackJackProject2026
                             openingDealerAces--;
                         }
 
+                        dealerHand.Add(dealerCard);
                         Console.ForegroundColor = ConsoleColor.White;
                         Console.WriteLine("Dealer drew:  " + dealerCard);
+                        PrintDealerHand(dealerHand);
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                        Console.WriteLine("\nDealer total: " + dealerTotal + "\n");
                         Console.ResetColor();
+
                     }
 
                     // determine result after dealer has finished drawing
@@ -1052,8 +1100,101 @@ namespace AlexThomasBlackJackProject2026
 
                     // skip the game loop entirely - hand is already resolved
                     gameOver = true;
-                }
 
+                }
+                // check if dealer has 21 on opening deal (dealer natural)
+                // if so resolve immediately - player does not get to draw
+                // this mirrors real casino rules where dealer checks for natural before play begins
+                if (dealerTotal == 21 && !gameOver)
+                {
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine("\n── Dealer's turn ──────────────────────");
+                    Console.ResetColor();
+
+                    while (Console.KeyAvailable) Console.ReadKey(true);
+
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.Write("Dealer revealing...");
+                    Thread.Sleep(1500);
+                    Console.SetCursorPosition(0, Console.CursorTop);
+                    Console.Write("                                        ");
+                    Console.SetCursorPosition(0, Console.CursorTop);
+                    Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
+                    PrintDealerHand(dealerHand);
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                    Console.ResetColor();
+
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Dealer has 21! Hand over.\n");
+                    Console.ResetColor();
+
+                    string naturalResult = DetermineWinner(playerTotal, dealerTotal);
+
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.WriteLine(player.Username + "'s total: " + playerTotal);
+                    Console.WriteLine("Dealer's total:  " + dealerTotal);
+
+                    if (naturalResult == "Loss")
+                    {
+                        tokenBalance -= currentBet;
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("\n★  GAME OVER: " + naturalResult + "  ★\n");
+                        Console.WriteLine("You lost " + currentBet + " tokens. Balance: " + tokenBalance);
+                        Console.ResetColor();
+                        stats.DealerWins++;
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("\n★  GAME OVER: " + naturalResult + "  ★\n");
+                        Console.WriteLine("Tie — bet returned. Balance: " + tokenBalance);
+                        Console.ResetColor();
+                        stats.Ties++;
+                    }
+
+                    SessionRecord naturalRecord = new SessionRecord();
+                    naturalRecord.SessionID = sessionID;
+                    naturalRecord.Username = player.Username;
+                    naturalRecord.PlayerAge = playerAge;
+                    naturalRecord.LoginTime = loginTime;
+                    naturalRecord.GameNumber = stats.TotalGames;
+                    naturalRecord.PlayerTotal = playerTotal;
+                    naturalRecord.DealerTotal = dealerTotal;
+                    naturalRecord.Result = naturalResult;
+                    naturalRecord.PlayerBusted = false;
+                    naturalRecord.DealerBusted = false;
+                    naturalRecord.NumberOfDraws = 0;
+                    naturalRecord.BetAmount = currentBet;
+                    naturalRecord.TokensBefore = tokensBefore;
+                    naturalRecord.TokensAfter = tokenBalance;
+                    naturalRecord.StrategyMode = strategyOn ? "On" : "Off";
+                    naturalRecord.OverrodeSuggestion = false;
+                    naturalRecord.DoubledDown = false;
+
+                    WriteRecordToCSV(naturalRecord, csvPath);
+
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Hand saved.\n");
+                    Console.ResetColor();
+
+                    if (tokenBalance < 5)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("\nNot enough tokens to continue. Game over.");
+                        Console.ResetColor();
+                        sessionActive = false;
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("─────────────────────────────────────");
+                        Console.WriteLine("Place a bet to continue, or type 'exit' to see your session summary.");
+                        Console.ResetColor();
+                    }
+
+                    gameOver = true;
+                }
                 // STRATEGY WARNING: HIGH OPENING HAND
                 // if strategy mode is on and the player's opening two cards total 17 or higher,
                 // warn them before the game loop starts - they haven't drawn yet but they should
@@ -1188,7 +1329,7 @@ namespace AlexThomasBlackJackProject2026
                         // Player presses N on a total of 11 with strategy mode on = warning shows = hand does NOT end immediately 
                         // Player press N again = no warnning = total is still 11 or lower but they confirmed = hand ends 
                         // Player presses Enter = draw branch runs normally
-                        if (strategyOn && playerTotal <= 11)
+                        if (strategyOn && playerTotal <= 11 && !lowStandWarningShown)
                         {
                             Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.WriteLine("⚠  Strategy tip: you are standing on " + playerTotal + ".");
@@ -1201,6 +1342,7 @@ namespace AlexThomasBlackJackProject2026
                             // if they press N again they confirm the stand
                             // if they press Enter they draw instead
                             // the game loop then reads the next keypress
+                            lowStandWarningShown = true;
                         }
                         else
                         {
@@ -1240,6 +1382,7 @@ namespace AlexThomasBlackJackProject2026
 
                             // deal exactly one more card
                             Card doubleCard = DealCard(deck);
+                            playerHand.Add(doubleCard);
                             int doubleValue = cardValues[doubleCard.Name];
                             if (doubleCard.Name == "Ace") playerAces++;
 
@@ -1252,11 +1395,10 @@ namespace AlexThomasBlackJackProject2026
                                 playerTotal -= 10;
                                 playerAces--;
                             }
-
-                            Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine("You drew:   " + doubleCard);
+                            Console.WriteLine();
+                            PrintPlayerHand(playerHand);
                             Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("Your total: " + playerTotal + "\n");
+                            Console.WriteLine("Your total:     " + playerTotal + "\n");
                             Console.ResetColor();
 
                             // hand ends automatically after double down
@@ -1284,6 +1426,7 @@ namespace AlexThomasBlackJackProject2026
                             // PLAYER DRAWS
 
                             Card playerCard = DealCard(deck);
+                            playerHand.Add(playerCard);
                             int playerCardValue = cardValues[playerCard.Name];
                             // track Aces separately for soft Ace handling
                             if (playerCard.Name == "Ace") playerAces++;
@@ -1305,17 +1448,16 @@ namespace AlexThomasBlackJackProject2026
                                 // one fewer Ace is being counted as 11
                             }
 
-                            // print the card and total ONCE right after the draw
-                            // the duplicate in the original was caused by printing here AND again after the strategy warning
-                            Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine("You drew:     " + playerCard);
-                            Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("Your total:   " + playerTotal + "\n");
-                            Console.ResetColor();
+                        // print the card and total ONCE right after the draw
+                        // the duplicate in the original was caused by printing here AND again after the strategy warning
+                        PrintPlayerHand(playerHand);
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("Your total:   " + playerTotal + "\n");
+                        Console.ResetColor();
 
-                            // check automatic ending conditions BEFORE showing strategy warning
-                            // if the hand is already over there is no point warning about the next draw
-                            if (playerTotal == 21)
+                        // check automatic ending conditions BEFORE showing strategy warning
+                        // if the hand is already over there is no point warning about the next draw
+                        if (playerTotal == 21)
                             {
                                 Console.ForegroundColor = ConsoleColor.Green;
                                 Console.WriteLine("BLACKJACK! You hit 21.\n");
@@ -1392,11 +1534,11 @@ namespace AlexThomasBlackJackProject2026
                         Console.SetCursorPosition(0, Console.CursorTop);
 
                         // now print the actual card reveal
-                        Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
+                        Console.WriteLine("\nDealer reveals hole card: " + dealerHoleCard);
+                        PrintDealerHand(dealerHand);
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                        Console.WriteLine("\nDealer total: " + dealerTotal + "\n");
                         Console.ResetColor();
-
 
                         // dealer always draws to 17 regardless of whether player busted
                         // this ensures DealerTotal in the CSV reflects the actual final hand
@@ -1417,11 +1559,12 @@ namespace AlexThomasBlackJackProject2026
                                 dealerTotal -= 10;
                                 dealerAces--;
                             }
-
+                            dealerHand.Add(dealerCard);
                             Console.ForegroundColor = ConsoleColor.White;
                             Console.WriteLine("Dealer drew:  " + dealerCard);
+                            PrintDealerHand(dealerHand);
                             Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("Dealer total: " + dealerTotal + "\n");
+                            Console.WriteLine("\nDealer total: " + dealerTotal + "\n");
                             Console.ResetColor();
                         }
 
