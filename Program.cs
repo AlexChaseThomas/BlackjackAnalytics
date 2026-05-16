@@ -196,37 +196,47 @@ namespace AlexThomasBlackJackProject2026
         {
             int safeRoom = 21 - currentTotal;
 
-            // card values accounting for Ace flexibility
-            // if safeRoom < 11, an Ace drawn would count as 1 (not 11) = safe
-            // if safeRoom >= 11, an Ace drawn counts as 11 = also safe
-            // either way, an Ace never busts you - it always takes the value that helps
-            int[] cardValues = { 11, 9, 8, 7, 6, 5, 4, 3, 10, 2 };
-            int[] cardCounts = { 1, 1, 1, 1, 1, 1, 1, 1, 4, 1 };
-
-            // effective card values — Ace uses 1 if 11 would bust
-            int[] effectiveValues = new int[cardValues.Length];
-            for (int i = 0; i < cardValues.Length; i++)
+            // Dictionary mapping each card name to its count in a standard deck
+            // 10, Jack, Queen, King all have value 10 - there are 4 of each = 16 total
+            // represented here as count 4 for the value 10
+            // all other values appear once in each suit = count 4 total
+            // but since we care about distinct VALUES not suits, we track per value:
+            // Ace=4, 2=4, 3=4 ... 9=4, 10/J/Q/K=16 total for value 10
+            // simplified to 13 distinct card types with their bust contribution weights
+            Dictionary<int, int> valueCount = new Dictionary<int, int>()
             {
-                int val = cardValues[i];
-                // if this card would bust at face value but is an Ace, it counts as 1
-                if (val > safeRoom && val == 11)
-                    effectiveValues[i] = 1; // Ace counts as 1 — safe
-                else
-                    effectiveValues[i] = val;
+                { 2,  1 }, { 3,  1 }, { 4,  1 }, { 5,  1 },
+                { 6,  1 }, { 7,  1 }, { 8,  1 }, { 9,  1 },
+                { 10, 4 }, // 10, Jack, Queen, King all worth 10
+                { 11, 1 }  // Ace — handled separately below for flexibility
+            };
+            // total = 13 distinct card type slots (weighted)
+            // 10 counts as 4 because 10/J/Q/K are four separate card types all worth 10
+
+            int totalTypes = 13;
+            // 13 = 9 unique low values (2-9) + 4 ten-value types (10/J/Q/K) + Ace
+            // this matches the probability denominator used throughout
+
+            int bustCount = 0;
+
+            foreach (var entry in valueCount) // foreach loop = iterates over every item in a collection one at a time
+                // in a dictionary, each item is a key-balue pair (e.g. int cardValue paired with int cardWeight)
+            {
+                int cardValue = entry.Key; // the cards point value 
+                int cardWeight = entry.Value; // how many card types share that value
+
+                // Ace flexibility: if Ace as 11 would bust, count it as 1 instead
+                if (cardValue == 11 && cardValue > safeRoom)
+                    cardValue = 1;
+
+                if (cardValue > safeRoom)
+                    bustCount += cardWeight;
             }
 
-            int totalCards = 13;
-            int bustCards = 0;
-
-            for (int i = 0; i < effectiveValues.Length; i++)
-            {
-                if (effectiveValues[i] > safeRoom)
-                    bustCards += cardCounts[i];
-            }
-
-            double bustChance = (double)bustCards / totalCards * 100;
+            double bustChance = (double)bustCount / totalTypes * 100;
             return Math.Round(bustChance) + "%";
-        } //closes CalculateBustChance
+        }
+        // closes CalculateBustChance
 
         // METHOD: Initialize Database = creates the SQLite database file and both tables on the first run 
         // IF NOT EXISTS means this is safe to call every time the program starts
