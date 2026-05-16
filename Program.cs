@@ -526,8 +526,9 @@ namespace AlexThomasBlackJackProject2026
 
         // METHOD: PrintPlayerHand = prints all cards in the player's current hand 
         // Method gets called after every draw so that the player can always view their full hand
-        static void PrintPlayerHand(List<Card> hand)
+        static void PrintPlayerHand(List<Card> hand, bool aceCountingAsOne = false)
         {
+         
             Console.ForegroundColor = ConsoleColor.White;
             Console.Write("Your hand:  ");
             for (int i = 0; i < hand.Count; i++)
@@ -535,6 +536,11 @@ namespace AlexThomasBlackJackProject2026
                 Console.Write(hand[i].ToString());
                 if (i < hand.Count - 1)
                     Console.Write("  |  ");
+            }
+            if (aceCountingAsOne)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                Console.Write("  (Ace counting as 1)");
             }
             Console.WriteLine();
             Console.ResetColor();
@@ -553,6 +559,7 @@ namespace AlexThomasBlackJackProject2026
                     Console.Write(" | ");
 
             }
+            
             Console.WriteLine();
             Console.ResetColor();
         } // closes PrintDealerHand
@@ -821,9 +828,7 @@ namespace AlexThomasBlackJackProject2026
 
             while (sessionActive)
             {
-                // these variables track ONE hand at a time 
-                // declared INSIDE the session loop so that they reset to zero every new hand 
-                // ***** if declared outside they would carry over from the previous hand *****
+                // HAND VARIABLES 
 
                 int playerTotal = 0;
                 int dealerTotal = 0;
@@ -849,6 +854,10 @@ namespace AlexThomasBlackJackProject2026
                 // minimum of 5 tokens, maximum of 100 tokens, cannot exceed their balance
                 int currentBet = 0;
                 bool validBet = false;
+                bool aceDropped = false;
+                // true when at least one Ace has been converted from 11 to 1
+                // used to show the player that their Ace is counting as 1
+
 
                 while (!validBet)
                 {
@@ -932,6 +941,7 @@ namespace AlexThomasBlackJackProject2026
                 {
                     playerTotal -= 10;
                     playerAces--;
+                    aceDropped = true;
                 }
 
                 // DEALER'S TWO STARTING CARDS
@@ -977,7 +987,7 @@ namespace AlexThomasBlackJackProject2026
                 Console.ResetColor();
 
                 // show player's two starting cards
-                PrintPlayerHand(playerHand);
+                PrintPlayerHand(playerHand, aceDropped);
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("Your total:   " + playerTotal + "\n");
                 Console.ResetColor();
@@ -1413,9 +1423,10 @@ namespace AlexThomasBlackJackProject2026
                             {
                                 playerTotal -= 10;
                                 playerAces--;
+                                aceDropped = true;
                             }
                             Console.WriteLine();
-                            PrintPlayerHand(playerHand);
+                            PrintPlayerHand(playerHand, aceDropped);
                             Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.WriteLine("Your total:     " + playerTotal + "\n");
                             Console.ResetColor();
@@ -1464,12 +1475,13 @@ namespace AlexThomasBlackJackProject2026
                                 playerTotal -= 10;
                                 // subtract 10 = convert one Ace from 11 to 1
                                 playerAces--;
-                                // one fewer Ace is being counted as 11
+                            // one fewer Ace is being counted as 11
+                            aceDropped = true;
                             }
 
                         // print the card and total ONCE right after the draw
                         // the duplicate in the original was caused by printing here AND again after the strategy warning
-                        PrintPlayerHand(playerHand);
+                        PrintPlayerHand(playerHand, aceDropped);
                         Console.ForegroundColor = ConsoleColor.Yellow;
                         Console.WriteLine("Your total:   " + playerTotal + "\n");
                         Console.ResetColor();
