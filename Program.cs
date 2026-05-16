@@ -194,41 +194,39 @@ namespace AlexThomasBlackJackProject2026
         // Used by the strategy warning system to demonstrate informed risk to the player
         static string CalculateBustChance(int currentTotal)
         {
-            // safeRoom = the highest card value that won't bust the player = any card with a value higher than safeRoom will cause a bust
-            int safeRoom = 21 - currentTotal; // i.e. how many points away you are from busting
+            int safeRoom = 21 - currentTotal;
 
-            // card values and how many of each exist in a STANDARD deck of 13 types 
-            // 10 appears 4 times because Jack, Queen, King, and 10 all are valued at 10
-            // every other value only appears once 
+            // card values accounting for Ace flexibility
+            // if safeRoom < 11, an Ace drawn would count as 1 (not 11) = safe
+            // if safeRoom >= 11, an Ace drawn counts as 11 = also safe
+            // either way, an Ace never busts you - it always takes the value that helps
             int[] cardValues = { 11, 9, 8, 7, 6, 5, 4, 3, 10, 2 };
             int[] cardCounts = { 1, 1, 1, 1, 1, 1, 1, 1, 4, 1 };
 
-            // These are parallel arrays - index 0 in cardValues matches index 0 in cardCounts
-            // cardValues[0] = 11  →  cardCounts[0] = 1   (Ace, appears once)
-            // cardValues[8] = 10  →  cardCounts[8] = 4   (10 / J / Q / K, appears four times)
-            // cardValues[9] = 2   →  cardCounts[9] = 1   (2, appears once)
-            // totalCards = 13 because if you add up all the counts: 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 4 + 1 = 13.
-            // Ace=11 (x1), 9(x1), 8(x1), 7(x1), 6(x1), 5(x1), 4(x1), 3(x1), 10-value(x4), 2(x1)
+            // effective card values — Ace uses 1 if 11 would bust
+            int[] effectiveValues = new int[cardValues.Length];
+            for (int i = 0; i < cardValues.Length; i++)
+            {
+                int val = cardValues[i];
+                // if this card would bust at face value but is an Ace, it counts as 1
+                if (val > safeRoom && val == 11)
+                    effectiveValues[i] = 1; // Ace counts as 1 — safe
+                else
+                    effectiveValues[i] = val;
+            }
 
             int totalCards = 13;
             int bustCards = 0;
 
-            // COUNT HOW MANY CARDS WOULD BUST YOU 
-            // each index passes through the for loop. Each pass through the loop, i is a different index (0,1,2,3...9) 
-            // at each index, it asks: "Does this card value exceed my safe room?" - if yes, it adds that card's count to bustCards
-            for (int i = 0; i < cardValues.Length; i++)
+            for (int i = 0; i < effectiveValues.Length; i++)
             {
-                if (cardValues[i] > safeRoom)
+                if (effectiveValues[i] > safeRoom)
                     bustCards += cardCounts[i];
             }
 
             double bustChance = (double)bustCards / totalCards * 100;
-            // (double) cast prevents integer division losing the decimal
-
             return Math.Round(bustChance) + "%";
-            // Math.Round() rounds to the nearest whole number 
-            // returned as a string so it prints cleanly e.g. "77%"
-        }   // closes CalculateBustChance
+        } //closes CalculateBustChance
 
         // METHOD: Initialize Database = creates the SQLite database file and both tables on the first run 
         // IF NOT EXISTS means this is safe to call every time the program starts
@@ -1098,11 +1096,16 @@ namespace AlexThomasBlackJackProject2026
                     // ConsoleKey = an enum = a special type representing a fixed set of named values
                     // instead of remembering that Escape = key code 27, you write ConsoleKey.Escape
 
-                    string input = ""; // input starts as empty string
-                    if (keypress.Key == ConsoleKey.Escape) input = "QUIT";
-                    else if (keypress.Key == ConsoleKey.N) input = "N";
+                    string input = "";
+                    if (keypress.Key == ConsoleKey.Escape)
+                        input = "QUIT";
+                    else if (keypress.Key == ConsoleKey.N)
+                        input = "N";
                     else if (keypress.Key == ConsoleKey.D && numberOfDraws == 0 && !doubledDown)
                         input = "DOUBLE";
+                    else if (keypress.Key == ConsoleKey.Enter)
+                        input = "HIT";
+                    // any other key is ignored — only valid keys trigger actions
                     // D key = double down
                     // only available on the first decision (numberOfDraws == 0)
                     // meaning the player has their two opening cards and hasn't drawn yet
@@ -1171,10 +1174,11 @@ namespace AlexThomasBlackJackProject2026
                     }
                     else if (input == "N")
                     {
-                        // STRATEGY WARNING: LOW STAND 
-                        // only triggers if strategy mode is activated AND total is 11 or lower
-                        // standing on 11 or less is statistically very weak
-                        // player gets informed but not blocked - informational only
+                        // STRATEGY WARNING: LOW STAND
+                        // Player presses N on a total of 12 or higher = no warning = hand ends 
+                        // Player presses N on a total of 11 with strategy mode on = warning shows = hand does NOT end immediately 
+                        // Player press N again = no warnning = total is still 11 or lower but they confirmed = hand ends 
+                        // Player presses Enter = draw branch runs normally
                         if (strategyOn && playerTotal <= 11)
                         {
                             Console.ForegroundColor = ConsoleColor.Yellow;
@@ -1184,11 +1188,17 @@ namespace AlexThomasBlackJackProject2026
                             Console.ForegroundColor = ConsoleColor.Cyan;
                             Console.WriteLine("   [ENTER] Draw instead  [N] Stand anyway  [ESC] Quit");
                             Console.ResetColor();
+                            // do NOT set gameOver here - wait for the player's next keypress
+                            // if they press N again they confirm the stand
+                            // if they press Enter they draw instead
+                            // the game loop then reads the next keypress
                         }
-
-                        // player chose to stand - end this hand only
-                        // sessionActive stays true so the play again prompt still runs
-                        gameOver = true;
+                        else
+                        {
+                            // no warning needed - player standing on a reasonable total
+                            // end the hand immediately
+                            gameOver = true;
+                        }
                     }
                     else if (input == "DOUBLE")
                     {
@@ -1244,101 +1254,103 @@ namespace AlexThomasBlackJackProject2026
                             gameOver = true;
                         }
                     }
-                    else {
-                        // player pressed Enter - draw one card for the player only
-                        // dealer does NOT draw here - dealer draws after player stands
-                        // this matches real blackjack dealer rules
+                    else if (input == "HIT")
+                            { 
+                            // player pressed Enter - draw one card for the player only
+                               // dealer does NOT draw here - dealer draws after player stands
+                               // this matches real blackjack dealer rules
 
-                        numberOfDraws++;
+                            numberOfDraws++;
 
-                        // if a warning was active from the previous draw, this draw is an override
-                        // the player was warned and chose to draw anyway
-                        if (warningActive)
-                        {
-                            overrodeSuggestion = true;
-                            stats.SuggestionsOverridden++;
-                            warningActive = false;
-                            // reset warningActive - the override is recorded, warning consumed
-                        }
+                            // if a warning was active from the previous draw, this draw is an override
+                            // the player was warned and chose to draw anyway
+                            if (warningActive)
+                            {
+                                overrodeSuggestion = true;
+                                stats.SuggestionsOverridden++;
+                                warningActive = false;
+                                // reset warningActive - the override is recorded, warning consumed
+                            }
 
-                        // PLAYER DRAWS
+                            // PLAYER DRAWS
 
-                        Card playerCard = DealCard(deck);
-                        int playerCardValue = cardValues[playerCard.Name];
-                        // track Aces separately for soft Ace handling
-                        if (playerCard.Name == "Ace") playerAces++;
+                            Card playerCard = DealCard(deck);
+                            int playerCardValue = cardValues[playerCard.Name];
+                            // track Aces separately for soft Ace handling
+                            if (playerCard.Name == "Ace") playerAces++;
 
-                        playerTotal += playerCardValue;
-                        // += adds the card value to the running total
-                        // shorthand for playerTotal = playerTotal + playerCardValue
-                        // accumulates each pass through the loop from its starting value of 0
+                            playerTotal += playerCardValue;
+                            // += adds the card value to the running total
+                            // shorthand for playerTotal = playerTotal + playerCardValue
+                            // accumulates each pass through the loop from its starting value of 0
 
-                        // SOFT ACE ADJUSTMENT FOR PLAYER
-                        // if drawing this card would bust the player AND they have a soft Ace,
-                        // drop one Ace from 11 to 1 by subtracting 10
-                        // this prevents an unfair bust when an Ace can legally be worth 1
-                        while (playerTotal > 21 && playerAces > 0)
-                        {
-                            playerTotal -= 10;
-                            // subtract 10 = convert one Ace from 11 to 1
-                            playerAces--;
-                            // one fewer Ace is being counted as 11
-                        }
+                            // SOFT ACE ADJUSTMENT FOR PLAYER
+                            // if drawing this card would bust the player AND they have a soft Ace,
+                            // drop one Ace from 11 to 1 by subtracting 10
+                            // this prevents an unfair bust when an Ace can legally be worth 1
+                            while (playerTotal > 21 && playerAces > 0)
+                            {
+                                playerTotal -= 10;
+                                // subtract 10 = convert one Ace from 11 to 1
+                                playerAces--;
+                                // one fewer Ace is being counted as 11
+                            }
 
-                        // print the card and total ONCE right after the draw
-                        // the duplicate in the original was caused by printing here AND again after the strategy warning
-                        Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine("You drew:     " + playerCard);
-                        Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("Your total:   " + playerTotal + "\n");
-                        Console.ResetColor();
-
-                        // check automatic ending conditions BEFORE showing strategy warning
-                        // if the hand is already over there is no point warning about the next draw
-                        if (playerTotal == 21)
-                        {
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("BLACKJACK! You hit 21.\n");
-                            Console.ResetColor();
-                            gameOver = true;
-                        }
-                        else if (playerTotal > 21)
-                        {
-                            // player busted - hand ends immediately
-                            // no strategy warning needed since no further draw is possible
-                            gameOver = true;
-                        }
-
-                        // STRATEGY WARNING: HIGH DRAW
-                        // only triggers if strategy mode is on AND total is 17 or higher
-                        // AND the hand isn't already over (hitting 21 or busting sets gameOver = true above)
-                        // shows bust percentage - informational only, no gate
-                        // warning appears AFTER the player sees the card they actually drew
-                        // so they understand the consequence of drawing again from their current total
-                        if (strategyOn && playerTotal >= 17 && !gameOver)
-                        {
-                            string bustChance = CalculateBustChance(playerTotal);
+                            // print the card and total ONCE right after the draw
+                            // the duplicate in the original was caused by printing here AND again after the strategy warning
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine("You drew:     " + playerCard);
                             Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("⚠  Strategy tip: your total is " + playerTotal + ".");
-                            Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
+                            Console.WriteLine("Your total:   " + playerTotal + "\n");
                             Console.ResetColor();
-                            Console.ForegroundColor = ConsoleColor.Cyan;
-                            Console.WriteLine("   [ENTER] Draw anyway  [N] Stand  [ESC] Quit");
-                            Console.ResetColor();
-                            // warningActive = true means the next draw is an override
-                            // we do not set overrodeSuggestion here because the player
-                            // has not yet chosen to draw again - they may still stand
-                            warningActive = true;
-                        }
 
-                    }   // closes else (draw branch)
+                            // check automatic ending conditions BEFORE showing strategy warning
+                            // if the hand is already over there is no point warning about the next draw
+                            if (playerTotal == 21)
+                            {
+                                Console.ForegroundColor = ConsoleColor.Green;
+                                Console.WriteLine("BLACKJACK! You hit 21.\n");
+                                Console.ResetColor();
+                                gameOver = true;
+                            }
+                            else if (playerTotal > 21)
+                            {
+                                // player busted - hand ends immediately
+                                // no strategy warning needed since no further draw is possible
+                                gameOver = true;
+                            }
 
-                    // STEP 8 = RESOLVE THE HAND
-                    // only runs when gameOver is true AND session is still active
-                    // the forfeit path already wrote its record and set sessionActive = false
-                    // so this block correctly skips on forfeit
+                            // STRATEGY WARNING: HIGH DRAW
+                            // only triggers if strategy mode is on AND total is 17 or higher
+                            // AND the hand isn't already over (hitting 21 or busting sets gameOver = true above)
+                            // shows bust percentage - informational only, no gate
+                            // warning appears AFTER the player sees the card they actually drew
+                            // so they understand the consequence of drawing again from their current total
+                            if (strategyOn && playerTotal >= 17 && !gameOver)
+                            {
+                                string bustChance = CalculateBustChance(playerTotal);
+                                Console.ForegroundColor = ConsoleColor.Yellow;
+                                Console.WriteLine("⚠  Strategy tip: your total is " + playerTotal + ".");
+                                Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
+                                Console.ResetColor();
+                                Console.ForegroundColor = ConsoleColor.Cyan;
+                                Console.WriteLine("   [ENTER] Draw anyway  [N] Stand  [ESC] Quit");
+                                Console.ResetColor();
+                                // warningActive = true means the next draw is an override
+                                // we do not set overrodeSuggestion here because the player
+                                // has not yet chosen to draw again - they may still stand
+                                warningActive = true;
+                            }
 
-                    if (gameOver && sessionActive)
+                            }   // closes draw branch
+
+
+                        // STEP 8 = RESOLVE THE HAND
+                        // only runs when gameOver is true AND session is still active
+                        // the forfeit path already wrote its record and set sessionActive = false
+                        // so this block correctly skips on forfeit
+
+                        if (gameOver && sessionActive)
                     {
 
                         // DEALER DRAWING PHASE
