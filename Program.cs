@@ -85,6 +85,15 @@ namespace AlexThomasBlackJackProject2026
         // Together (2) these help us compare decision quality and strategy groups
         public string StrategyMode;
         public bool OverrodeSuggestion;
+
+        // additional fields added during phase 3 schema expansion
+        public string DealerVisibleCard;
+        public int DealerVisibleValue;
+        public int OpeningPlayerTotal;
+        public int OpeningDealerTotal;
+        public bool PlayerHandWasSoft;
+        public int HandDurationSeconds;
+        public string OSVersion;
     }
 
     public class GameStats
@@ -102,6 +111,22 @@ namespace AlexThomasBlackJackProject2026
         // SuggestionsOverridden = records (counts) how many times the player ignored a warning 
         public bool StrategyModeOn = false;
         public int SuggestionsOverridden = 0;
+    }
+
+    // SessionSummary = one row per session in the Sessions table
+    // captures session-level analytics that would otherwise require aggregation derived from GameSessions
+
+    public class SessionSummary
+    {
+        public int SessionID;
+        public string Username;
+        public int PlayerID;
+        public string StartTime;
+        public string EndTime;
+        public int TotalHands;
+        public int StartBalance;
+        public int EndBalance;
+        public int NetProfit;
     }
     class BlackjackGame // this type of class is only accessible within this file/namespace (default = "internal")
     {
@@ -243,43 +268,55 @@ namespace AlexThomasBlackJackProject2026
         // if the tables already exist = nothing happens = no data lost
         static void InitializeDatabase(string dbPath)
         {
-           // SQLiteConnection = the bridge between C# and the SQLite database file
-           // "Data Source=" tells SQLite where the .db file lives 
-           // using statement = connection closes automatically when the block finishes 
-           using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
             {
-                connection.Open(); // establish the connection to the database = nothing can happen until this is called 
+                connection.Open();
 
-                // SQLiteCommand = a SQL statement that runs against the open connection.
                 using (var cmd = new SQLiteCommand(connection))
                 {
-                    // CREATE TABLE: Players = stores identity & current token balance 
-                    // Username = UNIQUE (database enforces no duplicates)
-                    // REPLACES: CSV-based username 'trust' system from Phase 2
-
-                    // @" = verbatim string literal = lets the string span multiple lines without needing special characters = formatting convenience that makes SQL readable
-                    cmd.CommandText = @" 
+                    // TABLE: Players
+                    // one row per unique username
+                    // stores identity, balance, and lifetime stats
+                    cmd.CommandText = @"
                         CREATE TABLE IF NOT EXISTS Players (
-                            PlayerID INTEGER PRIMARY KEY AUTOINCREMENT,
-                            Username TEXT UNIQUE NOT NULL,
-                            PlayerAge INTEGER, 
-                            FirstSeen TEXT,
-                            LastSeen TEXT,
-                            TokenBalance INTEGER
-                    )";
-                    // normalization = the identity data (players) lives in one place and the hand data references it by username (GameSessions)
-                    // AUTOINCREMENT = the database automatically assigns a unique number to each new row (PlayerID 1, PlayerID 2, ...etc)
+                            PlayerID             INTEGER PRIMARY KEY AUTOINCREMENT,
+                            Username             TEXT    UNIQUE NOT NULL,
+                            PlayerAge            INTEGER,
+                            FirstSeen            TEXT,
+                            LastSeen             TEXT,
+                            TokenBalance         INTEGER CHECK(TokenBalance >= 0),
+                            TotalHandsAllTime    INTEGER DEFAULT 0,
+                            TotalWinsAllTime     INTEGER DEFAULT 0,
+                            FavoriteStrategyMode TEXT    DEFAULT 'Unknown',
+                            LongestWinStreak     INTEGER DEFAULT 0
+                        )";
                     cmd.ExecuteNonQuery();
-                    // ExecutionNonQuery = runs an SQL statement that does not return rows = used for CREATE, INSERT, UPDATE, DELETE
-                    // Returns = # of rows affected (ignore it here)
 
-                    // CREATE TABLE: GameSessions = One Row Per Hand Played
-                    // username = Foreign Key linking back to the Players table 
-                    // NORMALIZED STRUCTURE 
+                    // TABLE: Sessions
+                    // one row per session
+                    // captures session-level analytics without requiring aggregation
+                    cmd.CommandText = @"
+                        CREATE TABLE IF NOT EXISTS Sessions (
+                            SessionID    INTEGER PRIMARY KEY,
+                            PlayerID     INTEGER REFERENCES Players(PlayerID),
+                            Username     TEXT    REFERENCES Players(Username),
+                            StartTime    TEXT,
+                            EndTime      TEXT,
+                            TotalHands   INTEGER DEFAULT 0,
+                            StartBalance INTEGER DEFAULT 0,
+                            EndBalance   INTEGER DEFAULT 0,
+                            NetProfit    INTEGER DEFAULT 0
+                        )";
+                    cmd.ExecuteNonQuery();
+
+                    // TABLE: GameSessions
+                    // one row per hand played
+                    // primary analytics table — joins to Players via PlayerID
                     cmd.CommandText = @"
                         CREATE TABLE IF NOT EXISTS GameSessions (
-                            RecordID           INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            SessionID          INTEGER,
+                            RecordID           INTEGER PRIMARY KEY AUTOINCREMENT,
+                            SessionID          INTEGER REFERENCES Sessions(SessionID),
+                            PlayerID           INTEGER REFERENCES Players(PlayerID),
                             Username           TEXT    REFERENCES Players(Username),
                             PlayerAge          INTEGER,
                             LoginTime          TEXT,
@@ -295,16 +332,19 @@ namespace AlexThomasBlackJackProject2026
                             TokensAfter        INTEGER,
                             StrategyMode       TEXT,
                             OverrodeSuggestion INTEGER,
-                            DoubledDown        INTEGER
+                            DoubledDown        INTEGER,
+                            DealerVisibleCard  TEXT    DEFAULT 'Unknown',
+                            DealerVisibleValue INTEGER DEFAULT 0,
+                            OpeningPlayerTotal INTEGER DEFAULT 0,
+                            OpeningDealerTotal INTEGER DEFAULT 0,
+                            PlayerHandWasSoft  INTEGER DEFAULT 0,
+                            HandDurationSeconds INTEGER DEFAULT 0,
+                            OSVersion          TEXT    DEFAULT 'Unknown'
                         )";
                     cmd.ExecuteNonQuery();
-                    // PlayerBusted, DealerBusted, OverrodeSuggestion, DoubledDown = stored as INTEGER (0 or 1) because SQLite has no bool type
-                    // 0 = false, 1 = true - we handle the conversion in C#
-
-
                 }
             }
-        } // closes InitializeDatabase
+        }   // closes InitializeDatabase
 
         // METHOD: LoadPlayerBalance
         // reads the CSV to find the last recorded token balance for this player
@@ -520,6 +560,7 @@ namespace AlexThomasBlackJackProject2026
                     record.StrategyMode + "," +
                     record.OverrodeSuggestion + "," +
                     record.DoubledDown
+
                 );
             }   // StreamWriter closes and saves automatically here
         }   // closes WriteRecordToCSV
@@ -563,6 +604,216 @@ namespace AlexThomasBlackJackProject2026
             Console.WriteLine();
             Console.ResetColor();
         } // closes PrintDealerHand
+
+        // METHOD: RegisterOrLoginPlayer = checks if the username exits in the player table (yes = existing player = load TokenBalance, no = new player = insert a row with 100 starting tokens)
+        // REPLACES: LoadPlayerBalance() and the CSV-based balance lookup
+        static (int balance, int playerID, int longestWinStreak) RegisterOrLoginPlayer(
+             string username, int playerAge, string loginTime, string dbPath)
+        {
+            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            {
+                connection.Open();
+
+                // check if username exists
+                using (var checkCmd = new SQLiteCommand(connection))
+                {
+                    checkCmd.CommandText = @"
+                        SELECT PlayerID, TokenBalance, LongestWinStreak
+                        FROM Players
+                        WHERE Username = @username";
+                    checkCmd.Parameters.AddWithValue("@username", username);
+
+                    using (var reader = checkCmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            // returning player
+                            int playerID = reader.GetInt32(0);
+                            int balance = reader.GetInt32(1);
+                            int longestWinStreak = reader.GetInt32(2);
+
+                            // update LastSeen
+                            using (var updateCmd = new SQLiteCommand(connection))
+                            {
+                                updateCmd.CommandText = @"
+                                    UPDATE Players
+                                    SET LastSeen = @loginTime
+                                    WHERE Username = @username";
+                                updateCmd.Parameters.AddWithValue("@loginTime", loginTime);
+                                updateCmd.Parameters.AddWithValue("@username", username);
+                                updateCmd.ExecuteNonQuery();
+                            }
+
+                            return (balance, playerID, longestWinStreak);
+                        }
+                    }
+                }
+
+                // new player — insert row
+                using (var insertCmd = new SQLiteCommand(connection))
+                {
+                    insertCmd.CommandText = @"
+                        INSERT INTO Players (Username, PlayerAge, FirstSeen, LastSeen, TokenBalance)
+                        VALUES (@username, @playerAge, @loginTime, @loginTime, 100)";
+                    insertCmd.Parameters.AddWithValue("@username", username);
+                    insertCmd.Parameters.AddWithValue("@playerAge", playerAge);
+                    insertCmd.Parameters.AddWithValue("@loginTime", loginTime);
+                    insertCmd.ExecuteNonQuery();
+                }
+
+                // get the new PlayerID
+                using (var idCmd = new SQLiteCommand(connection))
+                {
+                    idCmd.CommandText = "SELECT PlayerID FROM Players WHERE Username = @username";
+                    idCmd.Parameters.AddWithValue("@username", username);
+                    int newPlayerID = Convert.ToInt32(idCmd.ExecuteScalar());
+                    return (100, newPlayerID, 0);
+                }
+            }
+        }   // closes RegisterOrLoginPlayer
+
+        // METHOD: InsertGameRecord = inserts one completed hand into the GameSessions table + updates the player's TokenBalance in the Player's table
+        // REPLACES: WriteRecordToCSV()
+        // METHOD: InsertGameRecord
+        // inserts one completed hand into the GameSessions table
+        // also updates the player's TokenBalance in the Players table
+        // REPLACES: WriteRecordToCSV()
+        static void InsertGameRecord(SessionRecord record, string dbPath, int playerID)
+        {
+            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            {
+                connection.Open();
+
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                        INSERT INTO GameSessions (
+                            SessionID, PlayerID, Username, PlayerAge, LoginTime,
+                            GameNumber, PlayerTotal, DealerTotal,
+                            Result, PlayerBusted, DealerBusted, NumberOfDraws,
+                            BetAmount, TokensBefore, TokensAfter,
+                            StrategyMode, OverrodeSuggestion, DoubledDown,
+                            DealerVisibleCard, DealerVisibleValue,
+                            OpeningPlayerTotal, OpeningDealerTotal,
+                            PlayerHandWasSoft, HandDurationSeconds, OSVersion
+                        ) VALUES (
+                            @sessionID, @playerID, @username, @playerAge, @loginTime,
+                            @gameNumber, @playerTotal, @dealerTotal,
+                            @result, @playerBusted, @dealerBusted, @numberOfDraws,
+                            @betAmount, @tokensBefore, @tokensAfter,
+                            @strategyMode, @overrodeSuggestion, @doubledDown,
+                            @dealerVisibleCard, @dealerVisibleValue,
+                            @openingPlayerTotal, @openingDealerTotal,
+                            @playerHandWasSoft, @handDurationSeconds, @osVersion
+                        )";
+
+                    cmd.Parameters.AddWithValue("@sessionID", record.SessionID);
+                    cmd.Parameters.AddWithValue("@playerID", playerID);
+                    cmd.Parameters.AddWithValue("@username", record.Username);
+                    cmd.Parameters.AddWithValue("@playerAge", record.PlayerAge);
+                    cmd.Parameters.AddWithValue("@loginTime", record.LoginTime);
+                    cmd.Parameters.AddWithValue("@gameNumber", record.GameNumber);
+                    cmd.Parameters.AddWithValue("@playerTotal", record.PlayerTotal);
+                    cmd.Parameters.AddWithValue("@dealerTotal", record.DealerTotal);
+                    cmd.Parameters.AddWithValue("@result", record.Result);
+                    cmd.Parameters.AddWithValue("@playerBusted", record.PlayerBusted ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@dealerBusted", record.DealerBusted ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@numberOfDraws", record.NumberOfDraws);
+                    cmd.Parameters.AddWithValue("@betAmount", record.BetAmount);
+                    cmd.Parameters.AddWithValue("@tokensBefore", record.TokensBefore);
+                    cmd.Parameters.AddWithValue("@tokensAfter", record.TokensAfter);
+                    cmd.Parameters.AddWithValue("@strategyMode", record.StrategyMode);
+                    cmd.Parameters.AddWithValue("@overrodeSuggestion", record.OverrodeSuggestion ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@doubledDown", record.DoubledDown ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@dealerVisibleCard", record.DealerVisibleCard);
+                    cmd.Parameters.AddWithValue("@dealerVisibleValue", record.DealerVisibleValue);
+                    cmd.Parameters.AddWithValue("@openingPlayerTotal", record.OpeningPlayerTotal);
+                    cmd.Parameters.AddWithValue("@openingDealerTotal", record.OpeningDealerTotal);
+                    cmd.Parameters.AddWithValue("@playerHandWasSoft", record.PlayerHandWasSoft ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@handDurationSeconds", record.HandDurationSeconds);
+                    cmd.Parameters.AddWithValue("@osVersion", record.OSVersion);
+
+                    cmd.ExecuteNonQuery();
+                }
+
+                using (var updateCmd = new SQLiteCommand(connection))
+                {
+                    updateCmd.CommandText = @"
+                        UPDATE Players
+                        SET TokenBalance = @tokensAfter
+                        WHERE Username = @username";
+                    updateCmd.Parameters.AddWithValue("@tokensAfter", record.TokensAfter);
+                    updateCmd.Parameters.AddWithValue("@username", record.Username);
+                    updateCmd.ExecuteNonQuery();
+                }
+            }
+        }   // closes InsertGameRecord
+
+        static int CheckDailyBonusDB(string username, int currentBalance, string loginTime, string dbPath, out double hoursUntilBonus)
+        {
+            hoursUntilBonus = 0;
+
+            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            {
+                connection.Open();
+
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = "SELECT LastSeen FROM Players WHERE Username = @username";
+                    cmd.Parameters.AddWithValue("@username", username);
+
+                    var result = cmd.ExecuteScalar();
+
+                    if (result == null) return currentBalance;
+
+                    if (!DateTime.TryParse(result.ToString(), out DateTime lastSeen))
+                        return currentBalance;
+
+                    TimeSpan timeSinceLastLogin = DateTime.Now - lastSeen;
+
+                    if (timeSinceLastLogin.TotalHours >= 24)
+                    {
+                        int newBalance = currentBalance + 50;
+
+                        using (var updateCmd = new SQLiteCommand(connection))
+                        {
+                            updateCmd.CommandText = @"
+                                UPDATE Players
+                                SET TokenBalance = @newBalance, LastSeen = @loginTime
+                                WHERE Username = @username";
+                            updateCmd.Parameters.AddWithValue("@newBalance", newBalance);
+                            updateCmd.Parameters.AddWithValue("@loginTime", loginTime);
+                            updateCmd.Parameters.AddWithValue("@username", username);
+                            updateCmd.ExecuteNonQuery();
+                        }
+
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("╔══════════════════════════════════════╗");
+                        Console.WriteLine("║       🎁  DAILY BONUS AWARDED!        ║");
+                        Console.WriteLine("║    +50 tokens added to your balance  ║");
+                        Console.WriteLine("╚══════════════════════════════════════╝");
+                        Console.WriteLine("Previous balance : " + currentBalance + " tokens");
+                        Console.WriteLine("New balance      : " + newBalance + " tokens\n");
+                        Console.ResetColor();
+                        return newBalance;
+                    }
+                    else
+                    {
+                        hoursUntilBonus = 24 - timeSinceLastLogin.TotalHours;
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("Daily bonus available in: " + Math.Round(hoursUntilBonus, 1) + " hours.\n");
+                        Console.ResetColor();
+                        return currentBalance;
+                    }
+                }
+            }
+        }   // closes CheckDailyBonusDB
+
+
+
+        // ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
 
         static void Main() // This is the entry point of every C# program, when you run your program, C# scans your code looking specifically for a method called Main (C# STARTS EXECUTING HERE)
         {
@@ -627,7 +878,7 @@ namespace AlexThomasBlackJackProject2026
                 Console.Write("(21+) Enter your date of birth (MM/DD/YYYY): ");
                 Console.ResetColor();
                 string dobInput = Console.ReadLine().Trim();
-
+               
                 // DateTime.TryParse converts the string to a DateTime object
                 // if the user types "abc" or "13/45/2000" it won't crash - just returns false
                 // Phase 2: Security Update - only use player DOB to check age is over 21
@@ -724,6 +975,9 @@ namespace AlexThomasBlackJackProject2026
             // safe to call every run - IF NOT EXISTS prevents overwriting existing data
             InitializeDatabase(dbPath);
 
+            // capture OS version once per session — same for all hands
+            string osVersion = Environment.OSVersion.ToString();
+
             // create one GameStats instance for the whole session
             // every hand will update these counters + then they get printed at the end 
             GameStats stats = new GameStats();
@@ -731,9 +985,10 @@ namespace AlexThomasBlackJackProject2026
             // LoadPlayerBalance reads the CSV for this player's last recorded TokensAfter
             // if no record exists = returns 100 as starting balance
             // player.Username is the identifier - same username = same player history loaded
-            int tokenBalance = LoadPlayerBalance(player.Username, csvPath);
+            var (tokenBalance, playerID, longestWinStreak) = RegisterOrLoginPlayer(
+                player.Username, playerAge, loginTime, dbPath);
 
-            tokenBalance = CheckDailyBonus(player.Username, csvPath, tokenBalance, out double hoursUntilBonus);
+            tokenBalance = CheckDailyBonusDB(player.Username, tokenBalance, loginTime, dbPath, out double hoursUntilBonus);
             // 'out double hoursUntilBonus' declares the variable AND receives the value in one line
             // same pattern as 'out int balance' in LoadPlayerBalance
             // after this line, hoursUntilBonus holds either 0 (bonus awarded or new player)
@@ -838,6 +1093,11 @@ namespace AlexThomasBlackJackProject2026
                 bool warningActive = false;
                 bool lowStandWarningShown = false;
                 int playerAces = 0;
+
+                DateTime handStartTime = DateTime.Now;
+                // captures the moment the hand begins
+                // used to calculate HandDurationSeconds when the hand resolves
+
                 List<Card> playerHand = new List<Card>();
                 // stores every card the player has been dealt this hand = used to print the full hand display after each draw
                 List<Card> dealerHand = new List<Card>();
@@ -964,6 +1224,11 @@ namespace AlexThomasBlackJackProject2026
                     dealerTotal -= 10;
                     dealerAcesStart--;
                 }
+
+                // snapshot opening totals BEFORE any draws
+                // used for analytics — what did the player and dealer start with
+                int openingPlayerTotal = playerTotal;
+                int openingDealerTotal = dealerTotal;
 
                 // display game header THEN opening hands
                 // player sees their two cards and the dealer's one visible card
@@ -1095,8 +1360,16 @@ namespace AlexThomasBlackJackProject2026
                     openingRecord.StrategyMode = strategyOn ? "On" : "Off";
                     openingRecord.OverrodeSuggestion = false;
                     openingRecord.DoubledDown = false;
+                    openingRecord.DealerVisibleCard = dealerVisibleCard.Name;
+                    openingRecord.DealerVisibleValue = dealerVisibleValue;
+                    openingRecord.OpeningPlayerTotal = openingPlayerTotal;
+                    openingRecord.OpeningDealerTotal = openingDealerTotal;
+                    openingRecord.PlayerHandWasSoft = aceDropped;
+                    openingRecord.HandDurationSeconds = (int)(DateTime.Now - handStartTime).TotalSeconds;
+                    openingRecord.OSVersion = osVersion;
 
                     WriteRecordToCSV(openingRecord, csvPath);
+                    InsertGameRecord(openingRecord, dbPath, playerID);
 
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine("Hand saved.\n");
@@ -1193,8 +1466,16 @@ namespace AlexThomasBlackJackProject2026
                     naturalRecord.StrategyMode = strategyOn ? "On" : "Off";
                     naturalRecord.OverrodeSuggestion = false;
                     naturalRecord.DoubledDown = false;
+                    naturalRecord.DealerVisibleCard = dealerVisibleCard.Name;
+                    naturalRecord.DealerVisibleValue = dealerVisibleValue;
+                    naturalRecord.OpeningPlayerTotal = openingPlayerTotal;
+                    naturalRecord.OpeningDealerTotal = openingDealerTotal;
+                    naturalRecord.PlayerHandWasSoft = aceDropped;
+                    naturalRecord.HandDurationSeconds = (int)(DateTime.Now - handStartTime).TotalSeconds;
+                    naturalRecord.OSVersion = osVersion;
 
                     WriteRecordToCSV(naturalRecord, csvPath);
+                    InsertGameRecord(naturalRecord, dbPath, playerID);
 
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine("Hand saved.\n");
@@ -1341,8 +1622,16 @@ namespace AlexThomasBlackJackProject2026
                             forfeitRecord.StrategyMode = strategyOn ? "On" : "Off";
                             forfeitRecord.OverrodeSuggestion = overrodeSuggestion;
                             forfeitRecord.DoubledDown = doubledDown;
+                            forfeitRecord.DealerVisibleCard = dealerVisibleCard.Name;
+                            forfeitRecord.DealerVisibleValue = dealerVisibleValue;
+                            forfeitRecord.OpeningPlayerTotal = openingPlayerTotal;
+                            forfeitRecord.OpeningDealerTotal = openingDealerTotal;
+                            forfeitRecord.PlayerHandWasSoft = aceDropped;
+                            forfeitRecord.HandDurationSeconds = (int)(DateTime.Now - handStartTime).TotalSeconds;
+                            forfeitRecord.OSVersion = osVersion;
 
                             WriteRecordToCSV(forfeitRecord, csvPath);
+                            InsertGameRecord(forfeitRecord, dbPath, playerID);
 
                             gameOver = true;
                             sessionActive = false;
@@ -1690,17 +1979,19 @@ namespace AlexThomasBlackJackProject2026
                         record.BetAmount = currentBet;
                         record.TokensBefore = tokensBefore;
                         record.TokensAfter = tokenBalance;
-                        // tokenBalance already updated by token adjustment above
-                        // TokensAfter correctly reflects balance AFTER this hand resolved
                         record.StrategyMode = strategyOn ? "On" : "Off";
-                        // ternary - writes "On" or "Off" as readable string in the CSV
                         record.OverrodeSuggestion = overrodeSuggestion;
-                        // true if a warning was shown and acknowledged this hand
                         record.DoubledDown = doubledDown;
-                        // true if the player doubled down this hand
-                        // false for all normal hands
+                        record.DealerVisibleCard = dealerVisibleCard.Name;
+                        record.DealerVisibleValue = dealerVisibleValue;
+                        record.OpeningPlayerTotal = openingPlayerTotal;
+                        record.OpeningDealerTotal = openingDealerTotal;
+                        record.PlayerHandWasSoft = aceDropped;
+                        record.HandDurationSeconds = (int)(DateTime.Now - handStartTime).TotalSeconds;
+                        record.OSVersion = osVersion;
 
                         WriteRecordToCSV(record, csvPath);
+                        InsertGameRecord(record, dbPath, playerID);
 
                         Console.ForegroundColor = ConsoleColor.Green;
                         Console.WriteLine("Hand saved.\n");
@@ -1746,6 +2037,7 @@ namespace AlexThomasBlackJackProject2026
             Console.WriteLine("Ties                     : " + stats.Ties);
             Console.WriteLine("Player busts             : " + stats.PlayerBusts);
             Console.WriteLine("Dealer busts             : " + stats.DealerBusts);
+            Console.WriteLine("Longest win streak       : " + longestWinStreak); //longestWinStreak logic not added yet, but display line is ready for when it is
             Console.WriteLine("Full data saved to       : " + csvPath + "\n");
             Console.ResetColor();
 
