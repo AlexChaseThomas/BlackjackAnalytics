@@ -985,6 +985,9 @@ namespace AlexThomasBlackJackProject2026
             // LoadPlayerBalance reads the CSV for this player's last recorded TokensAfter
             // if no record exists = returns 100 as starting balance
             // player.Username is the identifier - same username = same player history loaded
+
+            int currentWinStreak = 0;
+
             var (tokenBalance, playerID, longestWinStreak) = RegisterOrLoginPlayer(
                 player.Username, playerAge, loginTime, dbPath);
 
@@ -997,7 +1000,7 @@ namespace AlexThomasBlackJackProject2026
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("Session ID           : " + sessionID);
             Console.WriteLine("Session started      : " + loginTime);
-            Console.WriteLine("Data saving to       : " + csvPath + "\n");
+            Console.WriteLine("Data saving to       : blackjack.db\n");
             Console.ResetColor();
 
             Console.ForegroundColor = ConsoleColor.Magenta;
@@ -1341,6 +1344,30 @@ namespace AlexThomasBlackJackProject2026
                     if (openingResult == "Win") { stats.PlayerWins++; }
                     else { stats.Ties++; }
 
+                    if (openingResult == "Win")
+                    {
+                        currentWinStreak++;
+                        if (currentWinStreak > longestWinStreak)
+                        {
+                            longestWinStreak = currentWinStreak;
+                            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+                            {
+                                connection.Open();
+                                using (var cmd = new SQLiteCommand(connection))
+                                {
+                                    cmd.CommandText = @"
+                                        UPDATE Players
+                                        SET LongestWinStreak = @streak
+                                        WHERE Username = @username";
+                                    cmd.Parameters.AddWithValue("@streak", longestWinStreak);
+                                    cmd.Parameters.AddWithValue("@username", player.Username);
+                                    cmd.ExecuteNonQuery();
+                                }
+                            }
+                        }
+                    }
+                    else { currentWinStreak = 0; }
+
                     // write the session record
                     SessionRecord openingRecord = new SessionRecord();
                     openingRecord.SessionID = sessionID;
@@ -1447,6 +1474,9 @@ namespace AlexThomasBlackJackProject2026
                         Console.ResetColor();
                         stats.Ties++;
                     }
+                    // dealer natural is always Loss or Tie — never a Win
+                    // so streak always resets here
+                    currentWinStreak = 0;
 
                     SessionRecord naturalRecord = new SessionRecord();
                     naturalRecord.SessionID = sessionID;
@@ -1921,7 +1951,31 @@ namespace AlexThomasBlackJackProject2026
                         if (result == "Win") stats.PlayerWins++;
                         else if (result == "Loss") stats.DealerWins++;
                         else stats.Ties++;
-        
+
+                        if (result == "Win")
+                        {
+                            currentWinStreak++;
+                            if (currentWinStreak > longestWinStreak)
+                            {
+                                longestWinStreak = currentWinStreak;
+                                using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+                                {
+                                    connection.Open();
+                                    using (var cmd = new SQLiteCommand(connection))
+                                    {
+                                        cmd.CommandText = @"
+                                            UPDATE Players
+                                            SET LongestWinStreak = @streak
+                                            WHERE Username = @username";
+                                        cmd.Parameters.AddWithValue("@streak", longestWinStreak);
+                                        cmd.Parameters.AddWithValue("@username", player.Username);
+                                        cmd.ExecuteNonQuery();
+                                    }
+                                }
+                            }
+                        }
+                        else { currentWinStreak = 0; }
+
                         if (playerTotal > 21) stats.PlayerBusts++;
                         if (dealerTotal > 21) stats.DealerBusts++;
 
@@ -2038,7 +2092,7 @@ namespace AlexThomasBlackJackProject2026
             Console.WriteLine("Player busts             : " + stats.PlayerBusts);
             Console.WriteLine("Dealer busts             : " + stats.DealerBusts);
             Console.WriteLine("Longest win streak       : " + longestWinStreak); //longestWinStreak logic not added yet, but display line is ready for when it is
-            Console.WriteLine("Full data saved to       : " + csvPath + "\n");
+            Console.WriteLine("Data saving to           : blackjack.db\n");
             Console.ResetColor();
 
             // end of session menu
