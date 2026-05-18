@@ -2,7 +2,7 @@
 ## BlackjackAnalytics — C# Blackjack Analytics Pipeline
 **Author:** Alex Thomas
 **Repository:** https://github.com/AlexChaseThomas/BlackjackAnalytics
-**Document version:** 3.0 (Phase 3 In Progress)
+**Document version:** 3.1 (Phase 3 Active)
 
 ---
 
@@ -55,6 +55,9 @@ Version | Phase | Description | Date
 - 2.2 | Phase 3 | Game engine bug fixes — dealer, bust rules, overrides | May 2026
 - 2.3 | Phase 3 | UI polish — dealer reveal pause, animations, prompts | May 2026
 - 2.4 | Phase 3 | SQLite schema design, InitializeDatabase() | May 2026
+- 2.5 | Phase 3 | RegisterOrLoginPlayer(), InsertGameRecord(), CheckDailyBonusDB() | May 2026
+- 2.6 | Phase 3 | 25-column schema — new fields wired in and populating | May 2026
+- 2.7 | Phase 3 | Win streak tracking, session summary updated | May 2026
 - 3.0 | Phase 3 Complete | In progress | May 2026
 
 ---
@@ -314,7 +317,7 @@ Version | Phase | Description | Date
 - Phase: Phase 3
 - Problem: The original Draw() and SuitAssigner() methods picked randomly from a 13-card array with no memory of what was already drawn. The same card could appear multiple times in one hand — impossible in a real deck.
 - Why it mattered: Duplicate cards in a hand corrupt every analytics dimension — hand totals, bust rates, draw counts. The data being generated was statistically invalid.
-- Solution: Introduced the Card class with Name, Suit, and ToString() override (prints Ace of Hearts). BuildDeck() creates a full 52-card List (13 values x 4 suits). ShuffleDeck() uses the Fisher-Yates algorithm — the standard unbiased shuffle that gives every possible ordering equal probability. DealCard() deals from index 0, removes the card, and auto-reshuffles when fewer than 10 cards remain. Duplicate cards within a hand are now impossible.
+- Solution: Introduced the Card class with Name, Suit, and ToString() override (prints Ace of Hearts). BuildDeck() creates a full 52-card List (13 values x 4 suits). ShuffleDeck() uses the Fisher-Yates algorithm — the standard unbiased shuffle that gives every possible ordering equal probability. DealCard() deals from index 0, removes the card, and auto-reshuffles when fewer than 10 cards remain.
 - Future considerations: The 10-card reshuffle threshold is conservative. A future multi-deck shoe version would track cards across multiple decks for card counting analytics.
 
 ---
@@ -342,14 +345,14 @@ Version | Phase | Description | Date
 - Phase: Phase 3
 - Problem: The dealer draw loop was wrapped in if (playerTotal <= 21) — meaning when the player busted, the dealer never drew. DealerTotal in the CSV recorded only the opening two-card total, not the actual final hand.
 - Why it mattered: DealerTotal being wrong on bust hands corrupts every analytics query that uses that field — average dealer totals, dealer bust rates, hand comparison distributions.
-- Solution: Removed the guard clause from around the dealer draw loop. Dealer now always draws to 17 regardless of player bust. DealerTotal in every CSV and database row now reflects the actual completed dealer hand.
+- Solution: Removed the guard clause from around the dealer draw loop. Dealer now always draws to 17 regardless of player bust. DealerTotal in every row now reflects the actual completed dealer hand.
 
 ---
 
 [BUG FIX] Both-bust rule — player always loses when they bust
 - Date: May 2026
 - Phase: Phase 3
-- Problem: DetermineWinner() had a special case returning Tie when both player and dealer busted. In real blackjack the player always loses when they bust — the dealer does not need to also bust to win. The house edge depends on this rule.
+- Problem: DetermineWinner() had a special case returning Tie when both player and dealer busted. In real blackjack the player always loses when they bust — the house edge depends on this rule.
 - Why it mattered: Recording Tie instead of Loss on both-bust hands and refunding the bet incorrectly represents the game's economics. Token flow analytics and win rate calculations would be wrong.
 - Solution: Removed the both-bust Tie case. Added if (playerTotal > 21) return Loss as the second condition in DetermineWinner() — player bust is always a loss regardless of dealer outcome.
 
@@ -361,14 +364,6 @@ Version | Phase | Description | Date
 - Problem: When both player and dealer hit exactly 21, DetermineWinner() returned Win because the player-21 check fired before the dealer-21 check.
 - Why it mattered: A push (tie) when both reach 21 is the correct casino rule. Recording it as a Win overstates win rates and awards tokens incorrectly.
 - Solution: Added if (playerTotal == 21 and dealerTotal == 21) return Tie as the first condition in DetermineWinner(), before all other checks.
-
----
-
-[BUG FIX] Duplicate BLACKJACK print in opening deal path
-- Date: May 2026
-- Phase: Phase 3
-- Problem: The BLACKJACK! You hit 21 on the deal! message printed twice when the player hit 21 on the opening hand.
-- Solution: Removed the duplicate Console.WriteLine block. Message now prints exactly once.
 
 ---
 
@@ -384,7 +379,7 @@ Version | Phase | Description | Date
 [BUG FIX] Exit at betting prompt dealt a phantom hand
 - Date: May 2026
 - Phase: Phase 3
-- Problem: Typing exit at the betting prompt set sessionActive = false and broke out of the betting loop, but the session loop continued into the hand setup, dealing cards and starting the game loop with a zero bet. The player was forced to ESC out of a hand they never intended to play.
+- Problem: Typing exit at the betting prompt set sessionActive = false and broke out of the betting loop, but the session loop continued into the hand setup, dealing cards and starting the game loop with a zero bet.
 - Solution: Added if (!sessionActive) break immediately after the betting loop closes. If the player typed exit, execution skips the entire hand setup and jumps directly to the session summary.
 
 ---
@@ -394,43 +389,106 @@ Version | Phase | Description | Date
 - Phase: Phase 3
 - Problem: stats.TotalGames++ incremented at the top of the session loop before the bet was placed. When the player typed exit, the counter had already incremented for a hand that was never played.
 - Why it mattered: The session summary showed one more hand than was actually played, and the last SessionRecord written had an incorrect GameNumber.
-- Solution: Moved stats.TotalGames++ to after the if (!sessionActive) break guard clause — the counter only increments after a valid bet is confirmed and a hand is actually starting.
+- Solution: Moved stats.TotalGames++ to after the if (!sessionActive) break guard clause.
 
 ---
 
 [UI/UX] Dealer hole card reveal pause animation
 - Date: May 2026
 - Phase: Phase 3
-- Problem: The dealer's hole card and all subsequent dealer draws appeared instantly with no pacing. The suspense of the dealer reveal — a core part of the blackjack experience — was absent.
-- Solution: Added Thread.Sleep(1500) before the hole card reveal with a Dealer revealing... prompt. Added Thread.Sleep(800) before each dealer draw with a Dealer drawing... prompt. Both use Console.SetCursorPosition to overwrite the suspense line with the actual card reveal, mimicking a card flip animation.
-- Future considerations: Cursor positioning behavior varies between terminal emulators. If the overwrite effect does not render correctly in a specific environment, falling back to Console.WriteLine without overwriting still preserves the timing pause.
+- Problem: The dealer's hole card and all subsequent dealer draws appeared instantly with no pacing.
+- Solution: Added Thread.Sleep(1500) before the hole card reveal with a Dealer revealing... prompt. Uses Console.SetCursorPosition to overwrite the suspense line with the actual card reveal.
 
 ---
 
 [UI/UX] Dealer hole card always revealed even on player bust
 - Date: May 2026
 - Phase: Phase 3
-- Problem: When the player busted, the dealer's hole card was never revealed. The player lost but had no visibility into what the dealer was holding.
-- Why it mattered: Transparency in game outcome is important for player trust and UX. A player should always be able to see what they were up against, even when they lose by busting.
-- Solution: Moved the hole card reveal block outside the if (playerTotal <= 21) guard. The hole card is now always revealed regardless of player bust status. The dealer draw loop also always runs — see the DealerTotal accuracy fix above.
+- Problem: When the player busted, the dealer's hole card was never revealed.
+- Why it mattered: Transparency in game outcome is important for player trust. A player should always see what the dealer was holding.
+- Solution: Moved the hole card reveal block outside the if (playerTotal <= 21) guard. Hole card always revealed regardless of player bust.
+
+---
+
+[UI/UX] Soft Ace display
+- Date: May 2026
+- Phase: Phase 3
+- Problem: Players could not see when an Ace had silently dropped from 11 to 1, making the hand total confusing.
+- Why it mattered: A player seeing a hand total that does not add up to what they expect loses trust in the game.
+- Solution: PrintPlayerHand() updated to accept aceCountingAsOne bool parameter. When true, appends (Ace counting as 1) after the hand display in DarkYellow. aceDropped flag set to true whenever a soft Ace adjustment occurs in any path.
 
 ---
 
 [UI/UX] Prompt text consistency
 - Date: May 2026
 - Phase: Phase 3
-- Problem: The continue/exit prompt used different wording in different paths — Type your bet to continue, or type exit to quit in some places and Place a bet to continue, or type exit to see your session summary in others.
-- Solution: Standardized all instances to: Place a bet to continue, or type exit to see your session summary. This wording is more informative — the player knows typing exit will show them something useful rather than just closing.
+- Problem: The continue/exit prompt used different wording in different paths.
+- Solution: Standardized all instances to: Place a bet to continue, or type exit to see your session summary.
 
 ---
 
-[ARCHITECTURE] SQLite database schema designed and initialized
+[ARCHITECTURE] Three-table SQLite schema designed and initialized
 - Date: May 2026
 - Phase: Phase 3
 - Problem: CSV flat file has no referential integrity, no querying capability, and no enforcement of data constraints. Username uniqueness cannot be enforced at the storage level.
 - Why it mattered: The analytics pipeline requires a queryable data store. SQL queries for win rates, bust rates, and strategy impact cannot run against a CSV. The Python and Power BI phases depend on a database being in place.
-- Solution: Designed a normalized two-table schema. Players table stores one row per unique username with PlayerID (AUTOINCREMENT PRIMARY KEY), Username (UNIQUE NOT NULL), PlayerAge, FirstSeen, LastSeen, and TokenBalance. GameSessions table stores one row per hand with a foreign key reference back to Players via Username. All bool fields stored as INTEGER (0 or 1) since SQLite has no native bool type. InitializeDatabase() creates both tables using CREATE TABLE IF NOT EXISTS — safe to call every program start. System.Data.SQLite.Core v1.0.119 NuGet package installed.
-- Future considerations: All SQL queries will use parameterized queries (the ? placeholder pattern) to prevent SQL injection. RegisterOrLoginPlayer(), InsertGameRecord(), and PrintQuerySummary() are the next three methods to implement.
+- Solution: Designed a normalized three-table schema. Players stores one row per unique username with PlayerID (AUTOINCREMENT PRIMARY KEY), Username (UNIQUE NOT NULL), PlayerAge, FirstSeen, LastSeen, TokenBalance (CHECK >= 0), TotalHandsAllTime, TotalWinsAllTime, FavoriteStrategyMode, and LongestWinStreak. Sessions stores one row per session — SessionID, PlayerID, Username, StartTime, EndTime, TotalHands, StartBalance, EndBalance, NetProfit. GameSessions stores one row per hand with 25 columns and foreign key references to both Players and Sessions via integer IDs. All bool fields stored as INTEGER (0 or 1) since SQLite has no native bool type. InitializeDatabase() creates all three tables using CREATE TABLE IF NOT EXISTS.
+- Future considerations: All SQL queries use parameterized queries to prevent SQL injection. Sessions table INSERT/UPDATE logic and Players lifetime stats updates are the remaining Phase 3 items.
+
+---
+
+[FEATURE] RegisterOrLoginPlayer()
+- Date: May 2026
+- Phase: Phase 3
+- Problem: LoadPlayerBalance() read the CSV backwards — no integrity, no querying, vulnerable to corruption.
+- Why it mattered: Balance persistence is the most critical piece of state in the game. Getting it wrong means players start every session with the wrong balance.
+- Solution: RegisterOrLoginPlayer() queries the Players table by Username using a parameterized SELECT. Returning players load their TokenBalance and LongestWinStreak and have LastSeen updated. New players get a fresh INSERT with 100 starting tokens. Returns a (balance, playerID, longestWinStreak) tuple so all three values are available in Main() from a single database call.
+- Future considerations: Replaces LoadPlayerBalance() entirely. CSV-based balance lookup is now dead code pending deletion.
+
+---
+
+[FEATURE] InsertGameRecord()
+- Date: May 2026
+- Phase: Phase 3
+- Problem: WriteRecordToCSV() produced a flat file with no queryability, no referential integrity, and no constraint enforcement.
+- Solution: InsertGameRecord() writes one row to GameSessions using a fully parameterized INSERT covering all 25 columns, then updates Players.TokenBalance in the same connection. Called at every hand resolution point — normal resolve, opening Blackjack, dealer natural, and forfeit. Bools converted to 0/1 integers at the parameter binding layer.
+- Future considerations: Replaces WriteRecordToCSV() as the primary data store. CSV writes still run in parallel pending deletion after PrintQuerySummary() is confirmed working.
+
+---
+
+[FEATURE] CheckDailyBonusDB()
+- Date: May 2026
+- Phase: Phase 3
+- Problem: CheckDailyBonus() read LoginTime from the CSV — slow on large files, unreliable if the CSV was corrupted, and dependent on a file that Phase 3 is eliminating.
+- Solution: CheckDailyBonusDB() reads Players.LastSeen with a single parameterized SELECT. Computes elapsed time as a TimeSpan. If 24+ hours have passed, awards 50 tokens and updates both TokenBalance and LastSeen in one UPDATE. Returns updated balance and hoursUntilBonus out parameter matching the original method signature.
+- Future considerations: Replaces CheckDailyBonus() entirely. CSV-based bonus check is now dead code pending deletion.
+
+---
+
+[DATA] 25-column GameSessions schema expansion
+- Date: May 2026
+- Phase: Phase 3
+- Problem: Original 17-column schema lacked fields needed for dealer upcard analysis, opening hand analysis, soft hand tracking, decision timing, and environmental context.
+- Why it mattered: Without DealerVisibleCard there is no way to analyze win rate by dealer upcard — one of the most analytically interesting questions in blackjack. Without OpeningPlayerTotal there is no way to study bust rates by starting hand.
+- Solution: Added DealerVisibleCard (TEXT DEFAULT Unknown), DealerVisibleValue (INTEGER DEFAULT 0), OpeningPlayerTotal (INTEGER DEFAULT 0), OpeningDealerTotal (INTEGER DEFAULT 0), PlayerHandWasSoft (INTEGER DEFAULT 0), HandDurationSeconds (INTEGER DEFAULT 0), OSVersion (TEXT DEFAULT Unknown). All new columns have DEFAULT values so existing rows remain valid.
+- Future considerations: Additional fields pocketed for future ALTER TABLE addition — DoubleDownResult, NumberOfAces. Card-level data would require a new HandCards table with one row per card dealt.
+
+---
+
+[FEATURE] Win streak tracking
+- Date: May 2026
+- Phase: Phase 3
+- Problem: LongestWinStreak existed in the Players table schema but was never populated during gameplay.
+- Why it mattered: Win streak is one of the most behaviorally interesting player stats — it captures hot streaks, tilt behavior, and session momentum.
+- Solution: currentWinStreak declared in Main() session scope, initialized to 0. Increments on every Win result across all three resolution paths — normal resolve block, opening Blackjack path, and dealer natural path. When currentWinStreak exceeds the loaded longestWinStreak, an immediate UPDATE writes the new record to Players.LongestWinStreak so it persists across sessions. Resets to 0 on any non-Win result including Tie, Loss, and dealer natural.
+
+---
+
+[UI/UX] Session summary updated
+- Date: May 2026
+- Phase: Phase 3
+- Problem: Session summary displayed the full CSV file path — verbose, unhelpful, and referencing a dependency being phased out. Longest win streak line was present but showed 0 because the tracking logic had not been wired in.
+- Solution: Replaced CSV path line with Data saved to: blackjack.db. Win streak tracking wired in — longestWinStreak now updates correctly during play and displays the accurate session high at the end.
 
 ---
 
@@ -439,45 +497,15 @@ Version | Phase | Description | Date
 # KNOWN LIMITATIONS AND TECHNICAL DEBT
 
 - Item | Phase introduced | Planned resolution
-- Username uniqueness not enforced | Phase 2 | Phase 3 — SQL UNIQUE constraint
-- ESC during betting requires typing exit | Phase 2 | Phase 3 — ReadKey betting flow
-- Recursive Main() for play again | Phase 2 | Phase 3 — top-level game loop
-- CSV still active in parallel | Phase 3 | Phase 3 — deleted after SQLite complete
-- CalculateBustChance uses parallel arrays | Phase 1 | Phase 3 — replace with Dictionary
-- No running hand display | Phase 1 | Phase 3 — show all cards held
-- Soft Ace not visually indicated | Phase 1 | Phase 3 — show Ace counting as 1
-- Username allows spaces | Phase 2 | Phase 3 — add space validation
-- No card counting / deck depletion | Phase 1 | Future feature — multi-deck tracking
+- CSV still active in parallel | Phase 3 | Pending deletion after PrintQuerySummary() complete
+- Sessions table not yet populated | Phase 3 | INSERT/UPDATE logic planned before Phase 3 close
+- Players lifetime stats not yet updated | Phase 3 | TotalHandsAllTime, TotalWinsAllTime, FavoriteStrategyMode pending
+- PrintQuerySummary() not yet implemented | Phase 3 | Highest portfolio impact item remaining
+- Comment pass on SQLite methods pending | Phase 3 | Scheduled before final Phase 3 commit
+- No card counting / deck depletion tracking | Phase 1 | Future feature — multi-deck shoe
 - Strategy suggestions not context-aware | Phase 1 | Future feature — dealer card factored in
 - Split hands not implemented | Phase 2 | Future feature — post-Phase 3
-
----
-
----
-
-# UPCOMING — PHASE 3 REMAINING WORK
-
-The following items are in progress or planned for completion before Phase 3 is committed as complete.
-
-Game engine fixes still in progress:
-- Fix 5 — Strategy warning on N stand waits for next keypress before standing
-- Fix 7 — Running hand display (show all cards held, not just last drawn)
-- Fix 8 — Bet confirmation line before cards are dealt
-- Fix 9 — Visual separator between hands
-- Fix 10 — Bust message before dealer turn
-- Fix 11 — Session summary shows PlayerBusts and DealerBusts counts
-- Fix 12 — CalculateBustChance parallel arrays replaced with Dictionary
-- Fix 13 — Username validation rejects spaces
-- Fix 14 — Soft Ace display shows when Ace is counting as 1
-
-SQLite methods to implement:
-- RegisterOrLoginPlayer() — replaces LoadPlayerBalance() and username entry flow
-- InsertGameRecord() — replaces WriteRecordToCSV()
-- CheckDailyBonus() migrated to read from Players.LastSeen
-- PrintQuerySummary() — live SQL analytics at end of session
-- Delete CSV dependency entirely
-- Test: play 10 hands, verify rows appear correctly in both tables
-- Commit: Phase 3 complete
+- Recursive Main() for play again | Phase 2 | Noted technical debt — acceptable for current scope
 
 ---
 
