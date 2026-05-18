@@ -17,6 +17,202 @@ Status indicators:
 - 💡 Future idea (not yet scoped)
 
 ---
+a# ROADMAP
+## BlackjackAnalytics — Development Phases and Milestones
+**Author:** Alex Thomas
+**Repository:** https://github.com/AlexChaseThomas/BlackjackAnalytics
+**Last updated:** May 2026
+
+---
+
+## How to read this document
+
+This roadmap tracks every development phase from initial build through portfolio completion. It is a living document updated at the end of each phase or major milestone.
+
+Status indicators:
+- ✅ Complete
+- 🔄 In progress
+- ⬜ Planned
+- 💡 Future idea (not yet scoped)
+
+---
+
+## Project goal
+
+Build a full-stack data analytics pipeline using a Blackjack game as the data generator. Demonstrate end-to-end technical ability across C#, SQL, Python, and Power BI in a single cohesive project that is publicly visible, well documented, and directly relevant to data analytics roles.
+
+---
+
+## ✅ PHASE 1 — Game Engine
+**Status:** Complete
+**Committed:** May 2026
+
+### Completed milestones
+- [x] Password gate (class project requirement, later removed in Phase 2)
+- [x] Player identity collection (first name, last name, DOB — later redesigned in Phase 2)
+- [x] DOB-based 21+ age verification
+- [x] Token economy with starting balance of 100
+- [x] CSV session persistence — balance carries across sessions
+- [x] Session ID generation from timestamp
+- [x] Daily login bonus system (50 tokens after 24 hours)
+- [x] Strategy suggestion mode with bust percentage warnings
+- [x] Betting system with minimum/maximum enforcement
+- [x] Double-ESC forfeit confirmation
+- [x] Dealer AI — hard 17 rule
+- [x] Soft Ace handling for player and dealer
+- [x] CSV schema with 16 columns
+- [x] Session statistics summary at end of session
+- [x] GameStats class tracking wins, losses, ties, busts, strategy overrides
+
+---
+
+## ✅ PHASE 2 — Code Cleanup, Identity System, Blackjack Realism
+**Status:** Complete
+**Committed:** May 2026
+
+### Completed milestones
+- [x] Single shared Random instance at class level (seed collision bug fix)
+- [x] Dictionary replaces all three if/else card value chains
+- [x] DetermineWinner() method extracted from Main()
+- [x] Password gate removed
+- [x] Real names replaced with username system
+- [x] Full DOB collected for verification only, immediately discarded, age integer stored
+- [x] Username validation (3-20 characters, stored lowercase)
+- [x] Proper casino deal order — player gets two cards, dealer gets one visible and one hole card
+- [x] Hole card hidden during player turn, revealed before dealer draws
+- [x] Double down mechanic — D key, opening two cards only, doubles bet, one card, auto-stand
+- [x] DoubledDown field added to SessionRecord and CSV schema
+- [x] Opening hand strategy warning for totals of 17 or higher
+- [x] Play again blended with betting prompt
+- [x] End of session menu with Play Again and Exit options
+
+---
+
+## 🔄 PHASE 3 — 52-Card Deck, Game Engine Polish, SQLite Integration
+**Status:** Active — SQLite integration complete, PrintQuerySummary() and final cleanup remaining
+**Target:** Current development session
+
+### Completed milestones
+- [x] Card class with Name, Suit, and ToString() override
+- [x] BuildDeck() — creates full 52-card deck (13 values x 4 suits)
+- [x] ShuffleDeck() — Fisher-Yates algorithm, unbiased shuffle
+- [x] DealCard() — deals from top of deck, auto-reshuffles when fewer than 10 cards remain
+- [x] Duplicate cards within a hand now impossible
+- [x] Opening Blackjack dealer draw fixed — dealer draws to 17 even on player Blackjack
+- [x] Dealer always reveals hole card even when player busts
+- [x] Dealer always completes hand to 17 regardless of player bust
+- [x] DetermineWinner both-bust rule fixed — player always loses when they bust
+- [x] DetermineWinner both-21 tie fixed
+- [x] overrodeSuggestion logic fixed — only true when player was warned AND drew anyway
+- [x] warningActive flag introduced to track warning state between keypresses
+- [x] Dealer reveal dramatic pause — Thread.Sleep animation
+- [x] Exit bug fixed — typing exit at bet prompt no longer deals a phantom hand
+- [x] Session summary shows PlayerBusts and DealerBusts counts
+- [x] CalculateBustChance replaced with Dictionary-based implementation
+- [x] Username validation rejects spaces
+- [x] Soft Ace display shows (Ace counting as 1) when Ace has dropped from 11 to 1
+- [x] Dealer natural 21 ends hand immediately
+- [x] Player and dealer hand display shows full card history after every draw
+- [x] Three-table SQLite schema — Players, Sessions, GameSessions
+- [x] Players table — PlayerID, Username, PlayerAge, FirstSeen, LastSeen, TokenBalance, TotalHandsAllTime, TotalWinsAllTime, FavoriteStrategyMode, LongestWinStreak
+- [x] Sessions table — one row per session for session-level analytics
+- [x] GameSessions table — 25-column schema, one row per hand
+- [x] InitializeDatabase() — creates all three tables with IF NOT EXISTS
+- [x] RegisterOrLoginPlayer() — replaces LoadPlayerBalance(), returns (balance, playerID, longestWinStreak) tuple
+- [x] InsertGameRecord() — replaces WriteRecordToCSV(), inserts hand and updates Players.TokenBalance
+- [x] CheckDailyBonusDB() — reads Players.LastSeen instead of CSV
+- [x] PlayerID foreign key wired into GameSessions
+- [x] New fields populating — DealerVisibleCard, DealerVisibleValue, OpeningPlayerTotal, OpeningDealerTotal, PlayerHandWasSoft, HandDurationSeconds, OSVersion
+- [x] Win streak tracking — currentWinStreak in session loop, updates Players.LongestWinStreak in real time
+- [x] Session summary updated — longest win streak displayed, data saved to blackjack.db
+
+### Remaining before Phase 3 close
+- [ ] Sessions table INSERT at session start, UPDATE at session end
+- [ ] Players lifetime stats updated at session end — TotalHandsAllTime, TotalWinsAllTime, FavoriteStrategyMode
+- [ ] PrintQuerySummary() — live SQL analytics printed at end of session
+- [ ] Comment pass on all SQLite methods
+- [ ] Delete CSV dependency — remove WriteRecordToCSV(), LoadPlayerBalance(), CheckDailyBonus()
+- [ ] Final Phase 3 commit
+
+---
+
+## ⬜ PHASE 4 — Python Analysis Scripts
+**Status:** Planned
+**Dependency:** Phase 3 complete
+
+### Milestones
+- [ ] Verify Python installation and pip
+- [ ] Install pandas and matplotlib
+- [ ] Create /analysis folder in repository
+- [ ] Write generate_synthetic_data.py — populates database with 300-500 realistic fake sessions
+- [ ] Write bust_analysis.py
+- [ ] Write win_rate_trends.py
+- [ ] Write strategy_impact.py
+- [ ] Write token_flow.py
+- [ ] Write draws_vs_outcome.py
+- [ ] Export all charts as .png files into /analysis/charts/
+- [ ] Commit: Phase 4 complete
+
+---
+
+## ⬜ PHASE 5 — Power BI Dashboard
+**Status:** Planned
+**Dependency:** Phase 4 complete
+
+### Milestones
+- [ ] Download Power BI Desktop
+- [ ] Install SQLite ODBC driver
+- [ ] Connect Power BI to blackjack.db
+- [ ] Build Page 1 — Session Overview
+- [ ] Build Page 2 — Hand Analysis
+- [ ] Build Page 3 — Strategy Analysis
+- [ ] Build Page 4 — Token Economy
+- [ ] Export dashboard screenshots
+- [ ] Add screenshots to /powerbi/screenshots/ and README
+- [ ] Commit: Phase 5 complete
+
+---
+
+## ⬜ GITHUB AND PORTFOLIO POLISH
+**Status:** Planned
+**Dependency:** Phase 5 complete
+
+### Milestones
+- [ ] Final README pass — add dashboard screenshots inline
+- [ ] Write docs/ARCHITECTURE.md
+- [ ] Final CHANGELOG update
+- [ ] Add repo topics on GitHub
+- [ ] Pin repository to GitHub profile
+- [ ] Prepare 2-minute verbal explanation for interviews
+
+---
+
+## 💡 FUTURE IDEAS (not yet scoped)
+
+- Blazor WebAssembly front end
+- Split hands mechanic
+- Card counting detection
+- Multi-game casino platform
+- Leaderboard
+- Achievement system
+- Context-aware strategy suggestions — factor in dealer visible card
+- Soft 17 dealer rule option
+- Azure or cloud deployment
+
+---
+
+## MILESTONE SUMMARY
+
+- Phase 1 complete — DONE
+- Phase 2 complete — DONE
+- Phase 3 complete — ACTIVE — SQLite integration live, cleanup remaining
+- Phase 4 complete — PLANNED
+- Phase 5 complete — PLANNED
+
+---
+
+This document is updated at the end of each development phase.
+Next update: Phase 3 Complete
 
 ## Project goal
 
@@ -213,9 +409,6 @@ FROM GameSessions WHERE Username = ?
 Write Python scripts that connect to the SQLite database, perform statistical analysis, and produce matplotlib charts committed to the repository.
 
 ### Milestones
-- [ ] Verify Python installation and pip
-- [ ] Install pandas and matplotlib
-- [ ] Create /analysis folder in repository
 - [ ] Write generate_synthetic_data.py — populates database with 300-500 realistic fake sessions
 - [ ] Write bust_analysis.py — histogram of player hand totals at time of bust
 - [ ] Write win_rate_trends.py — line chart of win rate over time
@@ -238,8 +431,6 @@ The database needs 300-500 rows to make dashboard visuals meaningful. Real play 
 Build a four-page interactive Power BI dashboard that connects directly to the SQLite database and visualizes the full dataset.
 
 ### Milestones
-- [ ] Download Power BI Desktop (free, Windows only)
-- [ ] Install SQLite ODBC driver (32-bit or 64-bit must match Power BI install)
 - [ ] Connect Power BI to blackjack.db
 - [ ] Build Page 1 — Session Overview
 - [ ] Build Page 2 — Hand Analysis
