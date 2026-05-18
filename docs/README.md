@@ -23,7 +23,9 @@ Nobody assigned this to me. I identified gaps in what my background could demons
 
 ## Gameplay
 
-![Gameplay](/screenshots/gameplay_p2_5.15.26.png)
+![Gameplay](/screenshots/gameplay_p3_5.18.26_image1.png)
+![Gameplay](/screenshots/gameplay_p3_5.18.26_image2.png)
+
 
 ---
 
