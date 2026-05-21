@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Data.SQLite;
+using System.IO;
 using System.Threading;
+using static System.Net.Mime.MediaTypeNames;
 
 
 
@@ -88,12 +89,19 @@ namespace AlexThomasBlackJackProject2026
 
         // additional fields added during phase 3 schema expansion
         public string DealerVisibleCard;
+
         public int DealerVisibleValue;
         public int OpeningPlayerTotal;
         public int OpeningDealerTotal;
         public bool PlayerHandWasSoft;
         public int HandDurationSeconds;
         public string OSVersion;
+        // strategy recommendation fields = capture what advice was given and whether it was followed
+        // enables recommendation adherence analysis, override heatmaps, and learning curve detection
+        public string RecommendedAction;      // "HIT", "STAND", or "NONE" — what basic strategy said to do
+        public bool RecommendationFollowed; // true if player did what was recommended
+        public string RiskLevel;              // "LOW", "MODERATE", "HIGH", "VERY HIGH" — bust risk category
+        public double DealerWinProbability;   // probability dealer beats current player total if player stands
     }
 
     public class GameStats
@@ -263,6 +271,39 @@ namespace AlexThomasBlackJackProject2026
         }
         // closes CalculateBustChance
 
+        // METHOD: CalculateBustChanceDouble
+        // same logic as CalculateBustChance() but returns a double instead of a formatted string
+        // used by the strategy recommendation system which needs the raw number for category thresholds
+        static double CalculateBustChanceDouble(int currentTotal)
+        {
+            int safeRoom = 21 - currentTotal;
+
+            Dictionary<int, int> valueCount = new Dictionary<int, int>()
+            {
+                { 2,  1 }, { 3,  1 }, { 4,  1 }, { 5,  1 },
+                { 6,  1 }, { 7,  1 }, { 8,  1 }, { 9,  1 },
+                { 10, 4 },
+                { 11, 1 }
+            };
+
+            int totalTypes = 13;
+            int bustCount = 0;
+
+            foreach (var entry in valueCount)
+            {
+                int cardValue = entry.Key;
+                int cardWeight = entry.Value;
+
+                if (cardValue == 11 && cardValue > safeRoom)
+                    cardValue = 1;
+
+                if (cardValue > safeRoom)
+                    bustCount += cardWeight;
+            }
+
+            return (double)bustCount / totalTypes * 100;
+        }   // closes CalculateBustChanceDouble
+
         // METHOD: Initialize Database = creates the SQLite database file and both tables on the first run 
         // IF NOT EXISTS means this is safe to call every time the program starts
         // if the tables already exist = nothing happens = no data lost
@@ -339,7 +380,11 @@ namespace AlexThomasBlackJackProject2026
                             OpeningDealerTotal INTEGER DEFAULT 0,
                             PlayerHandWasSoft  INTEGER DEFAULT 0,
                             HandDurationSeconds INTEGER DEFAULT 0,
-                            OSVersion          TEXT    DEFAULT 'Unknown'
+                            OSVersion          TEXT    DEFAULT 'Unknown',
+                            RecommendedAction    TEXT    DEFAULT 'NONE',
+                            RecommendationFollowed INTEGER DEFAULT 0,
+                            RiskLevel            TEXT    DEFAULT 'NONE',
+                            DealerWinProbability REAL    DEFAULT 0.0
                         )";
                     cmd.ExecuteNonQuery();
                 }
@@ -695,7 +740,9 @@ namespace AlexThomasBlackJackProject2026
                             StrategyMode, OverrodeSuggestion, DoubledDown,
                             DealerVisibleCard, DealerVisibleValue,
                             OpeningPlayerTotal, OpeningDealerTotal,
-                            PlayerHandWasSoft, HandDurationSeconds, OSVersion
+                            PlayerHandWasSoft, HandDurationSeconds, OSVersion, 
+                            RecommendedAction, RecommendationFollowed,
+                            RiskLevel, DealerWinProbability
                         ) VALUES (
                             @sessionID, @playerID, @username, @playerAge, @loginTime,
                             @gameNumber, @playerTotal, @dealerTotal,
@@ -704,7 +751,9 @@ namespace AlexThomasBlackJackProject2026
                             @strategyMode, @overrodeSuggestion, @doubledDown,
                             @dealerVisibleCard, @dealerVisibleValue,
                             @openingPlayerTotal, @openingDealerTotal,
-                            @playerHandWasSoft, @handDurationSeconds, @osVersion
+                            @playerHandWasSoft, @handDurationSeconds, @osVersion,
+                            @recommendedAction, @recommendationFollowed,
+                            @riskLevel, @dealerWinProbability
                         )";
 
                     cmd.Parameters.AddWithValue("@sessionID", record.SessionID);
@@ -732,6 +781,10 @@ namespace AlexThomasBlackJackProject2026
                     cmd.Parameters.AddWithValue("@playerHandWasSoft", record.PlayerHandWasSoft ? 1 : 0);
                     cmd.Parameters.AddWithValue("@handDurationSeconds", record.HandDurationSeconds);
                     cmd.Parameters.AddWithValue("@osVersion", record.OSVersion);
+                    cmd.Parameters.AddWithValue("@recommendedAction", record.RecommendedAction);
+                    cmd.Parameters.AddWithValue("@recommendationFollowed", record.RecommendationFollowed ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@riskLevel", record.RiskLevel);
+                    cmd.Parameters.AddWithValue("@dealerWinProbability", record.DealerWinProbability);
 
                     cmd.ExecuteNonQuery();
                 }
@@ -809,7 +862,327 @@ namespace AlexThomasBlackJackProject2026
             }
         }   // closes CheckDailyBonusDB
 
+        // METHOD: GetStrategyRecommendation = takes the player's cirremt total and the dealer's visible card value = returns "Hit" or "Stand" according to blackjack basic strategy rules
+        // Basic Strategy: when dealer is weak (2-6) the dealer busts often — stand on lower totals & when dealer is strong (7-Ace) the dealer rarely busts — hit more aggressively
+        // same logic used in published casino strategy cards BUT the difference is that we calculate the supporting probability in realtime rather than from a lookup table
+        static string GetStrategyRecommendation(int playerTotal, int dealerVisibleValue)
+        {
+            // always stand on 17 or higher regardless of dealer card
+            // the bust risk is too high to justify drawing in any scenario 
+            if (playerTotal >= 17) return "STAND";
 
+            // always hit on 11 or lower - cannot bust, drawing is always the correct move
+            if (playerTotal <= 11) return "HIT";
+
+            //dealer showing weak card (2-6) - dealer must draw and often busts 
+            //stand on 13-16, stand on 12 vs 4-6
+            if (dealerVisibleValue <= 6)
+            {
+                if (playerTotal >= 13) return "STAND";
+                if (playerTotal == 12 && dealerVisibleValue >= 4) return "STAND";
+                return "HIT";
+                // player 12 vs dealer 2-3 = hit (dealer not weak enough to justify standing on 12)
+            }
+
+            // dealer showing strong card (7-Ace) - dealer rarely busts, player must draw
+            // hit on 12-16 vs strong dealer 
+            return "HIT";
+
+        } // closes GetStrategyRecommendation
+
+        // METHOD: CalculateDealerWinProbability = hand enumeration model = calculates the probability the dealer beats the player's current total
+        // assumes the player stands at their current total (does not draw again)
+        // enumerates all possible dealer hole cards weighted by deck frequency 
+        // for each hole card = simulates the dealer drawing to 17 using expected value weighting 
+        // returns dealer win probability as a double 
+
+        // WHY THIS APPROACH INSTEAD OF A BASIC STRATEGY TABLE:
+        // Standard casino strategy card and many online gambling platforms implement recommendations as a static lookup table (e.g. player 16 vs dealer 10 = hit, regardless of the actual gamestate i.e. which specific combinations of cards were dealt) 
+        // Those tables were derived from exhuastive simulations done in the past and published, the platform just looks up the answer, but no math happens at runtime. 
+        // Here, we actually perform the underlying calculation dynamically from the current game state. Every recommendation is computed fresh based on the actual cards that are in play.
+        // i.e. the player sees not only what to do, but the probabilistic reasoning behind that recommendation; the same reasoning that generated the casino tables, made transparent and live. 
+
+        // The practical difference is small in a single-deck game with few cards dealt.
+        // HOWEVER, the aarchitectural difference is significant: this is a decision support system, not just a lookup table.
+        // That distinction mattters for the analytics layer: every recommendation is grounded in real probability derived from game state, not a static rule applied regardless of context. 
+        static double CalculateDealerWinProbability(int playerTotal, int dealerVisibleValue)
+        {
+            // card weights — how many of each value exist in a standard deck
+            // 10/Jack/Queen/King all have value 10 = weight 4
+            // all other values = weight 1 each
+            // Ace = value 11 (handled separately for soft total adjustment)
+            Dictionary<int, int> cardWeights = new Dictionary<int, int>()
+            {
+                { 2,  1 }, { 3,  1 }, { 4,  1 }, { 5,  1 },
+                { 6,  1 }, { 7,  1 }, { 8,  1 }, { 9,  1 },
+                { 10, 4 }, // 10, Jack, Queen, King
+                { 11, 1 }  // Ace
+            };
+
+            int totalWeight = 13;
+            // 9 single-weight values (2-9) + 4-weight value (10) + Ace = 13 total weight units
+
+            double dealerWins = 0;
+            double totalOutcomes = 0;
+
+            // OUTER LOOP — enumerate every possible dealer hole card
+            foreach (var holeEntry in cardWeights)
+            {
+                int holeValue = holeEntry.Key;
+                int holeWeight = holeEntry.Value;
+
+                // calculate dealer's two-card starting total
+                int dealerAces = 0;
+                if (dealerVisibleValue == 11) dealerAces++;
+                if (holeValue == 11) dealerAces++;
+
+                int dealerTotal = dealerVisibleValue + holeValue;
+
+                // soft Ace adjustment on opening hand
+                while (dealerTotal > 21 && dealerAces > 0)
+                {
+                    dealerTotal -= 10;
+                    dealerAces--;
+                }
+
+                // INNER LOOP — simulate dealer drawing to 17 using expected value weighting
+                // instead of enumerating every possible draw sequence (exponential),
+                // we weight each draw by its probability and accumulate expected outcomes
+                // this gives accurate probability without combinatorial overload
+                SimulateDealerDraw(playerTotal, dealerTotal, dealerAces,
+                                   holeWeight, totalWeight, cardWeights,
+                                   ref dealerWins, ref totalOutcomes);
+            }
+
+            if (totalOutcomes == 0) return 0;
+            return Math.Round(dealerWins / totalOutcomes * 100, 1);
+        }   // closes CalculateDealerWinProbability
+
+        // METHOD: SimulateDealerDraw = recursive helper for CalculateDealerWinProbability = simulates the dealer drawing to 17 from the current state
+        // Utilizes weighted card probabilities rather than enumerating every possible sequence 
+        // weight = the cumulative probability weight of reaching this game state 
+
+        // Parameters:
+        // int playerTotal = the player's current hand total = passed through method so we know whether or not the dealer won = the dealer wins only if their final total is between 17 and 21 AND its higher than this number (playerTotal)
+        // int dealerTotal = the dealer's current hand total = 1st call - this is the dealer's visible card plus one possible hole card = 2nd+ (recursive) calls - this is the dealer's total after drawing one more card. The method keeps drawing until this number reaches 17 or higher. 
+        // int dealerAces = How many Aces the dealer currently holds that are still counting as 11 = mirrors soft Ace logic in Main() = if the dealer would bust but has a soft Ave, subtract 10 and decrement this counter - without tracking this the simulation would incorrectly bust the dealer on hands where an Ace rescue is avaliable.
+
+        // double weight = this is the key to how the method works without enumerating billions of combinatitions = instead of simulating every possible sequence of cards as a separate path, each path is assigned a probability weight. = the first call starts with the weight of the hole card, when the dealer draws another card, the weight multiplie by that card's probability
+        // EXAMPLE:In the first call, a 10-value card has weight 4/13 because the are 4 tem-value cards out of the 13 distinct card types. In the recursive calls (i.e. dealer draws another card) a path where the dealer's hole card is a 10, and the draws a 5 has weight 4/13*1/13 = the weight accumulates the probability of that entire sequence occuring.
+
+        // int totalWeight = the denominator for probability calculations = always 13 in our model = 13 distinct card type slots (9 single-weight values, one 4-weight values for tens, one for Ace) = passed in so that recursive calls can use the same denominator without recalculating it.
+        // Dictionary<int, int> cardWeights = the same card frequency table used throughout the program = maps each card value to how many of that type exist in the deck
+
+        // ref double dealerWins = the running tally of proabbility-weighted outcomes where the dealer beat the player. ref means this varaible is passed by reference (the method writes directly into the variabel that was declared in CalculateDealerWinProbability() rather than working on a copy) = Everytime the simulation reaches a terminal state where the dealer wins, it adds weight of that path to its total. =  At the end, dealerWins holds the sum of all winning path probabilities 
+        // ref double totalOutcomes = the running tally of all terminal outcomes regardless of who wins = everytime the simulation reaches a terminal state (e.g. dealer stands on 17+, dealer busts, any finished hand) = adds that path's weight here = totalOutcomes holds the total probability mass of all outcomes = dividing dealerWins by totalOutcomes gives the win probability
+
+        // WHY REF INSTEAD OF RETURN VALUES? 
+        // The method calls itself recursively - SimulateDealerDraw calls SimulateDealerDraw for each possible next card. A recursive method cannot return two accumualting values cleanly. 
+        // Using ref paramaeters lets every level of the recursion write directly into the same two variables that were declared at the top = every branch of the probability tree updates the same counters regardless of how deep the recursion goes. 
+
+        // WHAT DOES THE RECURSION LOOK LIKE IN PRACTICE? 
+        // Start: dealer showing 6, hole card is a 10. dealerTotal = 16, weight = 4/13.
+                      
+        // Dealer must draw(16 < 17). Loop over all possible next cards:
+             // Draw a 2 (weight 1/13): dealerTotal = 18, weight = 4/13 × 1/13. Dealer stands.Does 18 beat playerTotal? Add to tallies.
+             // Draw a 5 (weight 1/13): dealerTotal = 21, weight = 4/13 × 1/13. Dealer stands.Does 21 beat playerTotal? Add to tallies.
+             // Draw a 10 (weight 4/13): dealerTotal = 26, weight = 4/13 × 4/13. Dealer busts.Add weight to totalOutcomes only.
+             // Draw an Ace (weight 1/13): dealerTotal = 27, soft Ace drops to 17, weight = 4 / 13 × 1/13. Dealer stands.Evaluate.
+        // Each of those draws that did not yet reach 17 would recurse again. The tree keeps branching until every path terminates. The weights ensure that more probable path contribute more to the final probability than less probable paths. 
+        
+        // This method is WEIGHTED PROBABILITY TREE TRAVERSAL
+        // ANSWERS: If the dealer has this total right now and draws to 17, across all possible ways that could unfold, weighted by their likelihood, what fraction of outcomes end with dealer beating the player = that fraction is the number we show to the player in the recommendation box
+        static void SimulateDealerDraw(int playerTotal, int dealerTotal, int dealerAces, double weight, int totalWeight, Dictionary <int, int> cardWeights, ref double dealerWins, ref double totalOutcomes)
+        {
+            if (dealerTotal >= 17)
+            {
+                // dealer has finished drawing — evaluate outcome
+                totalOutcomes += weight;
+                if (dealerTotal <= 21 && dealerTotal > playerTotal)
+                    dealerWins += weight;
+                // dealer busts = player wins = not counted in dealerWins
+                // dealer total <= playerTotal = player wins or ties = not counted
+                return;
+            }
+
+            // dealer must draw — recurse for each possible next card
+            foreach (var entry in cardWeights)
+            {
+                int cardValue = entry.Key;
+                int cardWeight = entry.Value;
+                int newTotal = dealerTotal + cardValue;
+                int newAces = dealerAces + (cardValue == 11 ? 1 : 0);
+
+                // soft Ace adjustment
+                while (newTotal > 21 && newAces > 0)
+                {
+                    newTotal -= 10;
+                    newAces--;
+                }
+
+                // recurse with updated state and scaled weight
+                // weight scales by cardWeight/totalWeight at each draw level
+                SimulateDealerDraw(playerTotal, newTotal, newAces,
+                                   weight * cardWeight / totalWeight,
+                                   totalWeight, cardWeights,
+                                   ref dealerWins, ref totalOutcomes);
+            }
+        }   // closes SimulateDealerDraw
+
+        // METHOD: GetRiskLevel = converts a bust percentage to a human-readable risk category 
+        // Categories are processed faster than raw percentages for in-game decisions 
+        // raw percentage is still displayed alongside for analytical transparency
+        static string GetRiskLevel(double bustChance)
+        {
+            if (bustChance <= 30) return "LOW";
+            if (bustChance <= 55) return "MODERATE";
+            if (bustChance <= 75) return "HIGH";
+            return "VERY HIGH";
+        }   // closes GetRiskLevel
+
+        // METHOD: GetDealerStrength = converts dealer win probability to a human-readable strength category
+        static string GetDealerStrength(double dealerWinProbability)
+        {
+            if (dealerWinProbability <= 30) return "WEAK";
+            if (dealerWinProbability <= 50) return "MODERATE";
+            return "STRONG";
+        }   // closes GetDealerStrength
+
+        // METHOD: PrintStrategyRecommendation
+        // two-tier display system based on decision stakes
+        // total 11 or lower  — no display, data still captured, player cannot bust
+        // total 12 or higher — inline tip with color-coded controls
+        // green = recommended action, red = override action, cyan = quit
+        // mirrors how real strategy cards work — guidance only when the decision is meaningful
+        static void PrintStrategyRecommendation(string recommendation, double bustChance,
+                                                 double dealerWinProb, int dealerVisibleValue,
+                                                 int playerTotal)
+        {
+            string riskLevel = GetRiskLevel(bustChance);
+            string dealerStrength = GetDealerStrength(dealerWinProb);
+            string bustDisplay = riskLevel + " (" + (int)bustChance + "%)";
+
+            // TIER 1 — total 11 or lower — no display needed
+            // player cannot bust, drawing is always correct, no guidance necessary
+            if (playerTotal <= 11) return;
+
+            // TIER 2 — total 12 or higher — inline tip with stats and color-coded controls
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            if (recommendation == "HIT")
+            {
+                Console.WriteLine("💡 Tip! HIT. The dealer's position is " + dealerStrength +
+                                  " (" + (int)dealerWinProb + "% chance dealer wins if you stand).");
+            }
+            else
+            {
+                double dealerBustProb = CalculateDealerBustProbability(dealerVisibleValue);
+                Console.WriteLine("💡 Tip! STAND. The dealer has a " + (int)dealerBustProb +
+                                  "% chance of busting, the bust rate for hitting is " + bustDisplay + ".");
+            }
+
+            if (recommendation == "HIT")
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write("   [ENTER] HIT  ");
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Write("[N] STAND  ");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("[ESC] QUIT");
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write("   [N] STAND  ");
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Write("[ENTER] HIT  ");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("[ESC] QUIT");
+            }
+            Console.ResetColor();
+        }   // closes PrintStrategyRecommendation
+
+        // METHOD: CalculateDealerBustProbability
+        // calculates the probability the dealer busts from their visible card
+        // used in STAND recommendations to explain why standing is correct
+        // a weak dealer card = high bust probability = good reason to stand
+        static double CalculateDealerBustProbability(int dealerVisibleValue)
+        {
+            Dictionary<int, int> cardWeights = new Dictionary<int, int>()
+            {
+                { 2,  1 }, { 3,  1 }, { 4,  1 }, { 5,  1 },
+                { 6,  1 }, { 7,  1 }, { 8,  1 }, { 9,  1 },
+                { 10, 4 },
+                { 11, 1 }
+            };
+
+            int totalWeight = 13;
+            double dealerBusts = 0;
+            double totalOutcomes = 0;
+
+            foreach (var holeEntry in cardWeights)
+            {
+                int holeValue = holeEntry.Key;
+                int holeWeight = holeEntry.Value;
+
+                int dealerAces = 0;
+                if (dealerVisibleValue == 11) dealerAces++;
+                if (holeValue == 11) dealerAces++;
+
+                int dealerTotal = dealerVisibleValue + holeValue;
+
+                while (dealerTotal > 21 && dealerAces > 0)
+                {
+                    dealerTotal -= 10;
+                    dealerAces--;
+                }
+
+                // simulate dealer drawing to 17, track bust outcomes
+                SimulateDealerBust(dealerTotal, dealerAces,
+                                   holeWeight, totalWeight, cardWeights,
+                                   ref dealerBusts, ref totalOutcomes);
+            }
+
+            if (totalOutcomes == 0) return 0;
+            return Math.Round(dealerBusts / totalOutcomes * 100, 1);
+        }   // closes CalculateDealerBustProbability
+
+        // METHOD: SimulateDealerBust = recursive helper for CalculateDealerBustProbability
+        // mirrors SimulateDealerDraw but tracks bust outcomes instead of win outcomes
+        // walks every possible dealer draw sequence weighted by card probability
+        // when the dealer reaches 17 or higher, checks if they busted (total > 21)
+        // adds the path weight to dealerBusts if bust, totalOutcomes regardless
+        static void SimulateDealerBust(int dealerTotal, int dealerAces,
+                                        double weight, int totalWeight,
+                                        Dictionary<int, int> cardWeights,
+                                        ref double dealerBusts, ref double totalOutcomes)
+        {
+            if (dealerTotal >= 17)
+            {
+                totalOutcomes += weight;
+                if (dealerTotal > 21)
+                    dealerBusts += weight;
+                return;
+            }
+
+            foreach (var entry in cardWeights)
+            {
+                int cardValue = entry.Key;
+                int cardWeight = entry.Value;
+                int newTotal = dealerTotal + cardValue;
+                int newAces = dealerAces + (cardValue == 11 ? 1 : 0);
+
+                while (newTotal > 21 && newAces > 0)
+                {
+                    newTotal -= 10;
+                    newAces--;
+                }
+
+                SimulateDealerBust(newTotal, newAces,
+                                   weight * cardWeight / totalWeight,
+                                   totalWeight, cardWeights,
+                                   ref dealerBusts, ref totalOutcomes);
+            }
+        }   // closes SimulateDealerBust
 
         // ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
@@ -1120,6 +1493,11 @@ namespace AlexThomasBlackJackProject2026
                 bool aceDropped = false;
                 // true when at least one Ace has been converted from 11 to 1
                 // used to show the player that their Ace is counting as 1
+                // strategy recommendation tracking — reset each hand
+                string recommendedAction = "NONE";
+                bool recommendationFollowed = false;
+                string riskLevel = "NONE";
+                double dealerWinProbability = 0.0;
 
 
                 while (!validBet)
@@ -1394,6 +1772,10 @@ namespace AlexThomasBlackJackProject2026
                     openingRecord.PlayerHandWasSoft = aceDropped;
                     openingRecord.HandDurationSeconds = (int)(DateTime.Now - handStartTime).TotalSeconds;
                     openingRecord.OSVersion = osVersion;
+                    openingRecord.RecommendedAction = recommendedAction;
+                    openingRecord.RecommendationFollowed = recommendationFollowed;
+                    openingRecord.RiskLevel = riskLevel;
+                    openingRecord.DealerWinProbability = dealerWinProbability;
 
                     WriteRecordToCSV(openingRecord, csvPath);
                     InsertGameRecord(openingRecord, dbPath, playerID);
@@ -1503,6 +1885,10 @@ namespace AlexThomasBlackJackProject2026
                     naturalRecord.PlayerHandWasSoft = aceDropped;
                     naturalRecord.HandDurationSeconds = (int)(DateTime.Now - handStartTime).TotalSeconds;
                     naturalRecord.OSVersion = osVersion;
+                    naturalRecord.RecommendedAction = recommendedAction;
+                    naturalRecord.RecommendationFollowed = recommendationFollowed;
+                    naturalRecord.RiskLevel = riskLevel;
+                    naturalRecord.DealerWinProbability = dealerWinProbability;
 
                     WriteRecordToCSV(naturalRecord, csvPath);
                     InsertGameRecord(naturalRecord, dbPath, playerID);
@@ -1535,18 +1921,14 @@ namespace AlexThomasBlackJackProject2026
                 // warn them before the game loop starts - they haven't drawn yet but they should
                 // know that hitting from this total carries significant bust risk
                 // same bust percentage logic as the mid-hand warning
-
-                if (strategyOn && playerTotal >= 17 && !gameOver)
+                if (strategyOn && !gameOver)
                 {
-                    string bustChance = CalculateBustChance(playerTotal);
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("⚠  Strategy tip: your opening total is " + playerTotal + ".");
-                    Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
-                    Console.ResetColor();
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.WriteLine("   [ENTER] Hit anyway  [N] Stand  [D] Double Down  [ESC] Quit");
-                    Console.ResetColor();
-                    // set warningActive so the first draw after this warning counts as an override
+                    recommendedAction = GetStrategyRecommendation(playerTotal, dealerVisibleValue);
+                    dealerWinProbability = CalculateDealerWinProbability(playerTotal, dealerVisibleValue);
+                    double bustPct = CalculateBustChanceDouble(playerTotal);
+                    riskLevel = GetRiskLevel(bustPct);
+                    PrintStrategyRecommendation(recommendedAction, bustPct,
+                                                dealerWinProbability, dealerVisibleValue, playerTotal);
                     warningActive = true;
                 }
 
@@ -1659,6 +2041,10 @@ namespace AlexThomasBlackJackProject2026
                             forfeitRecord.PlayerHandWasSoft = aceDropped;
                             forfeitRecord.HandDurationSeconds = (int)(DateTime.Now - handStartTime).TotalSeconds;
                             forfeitRecord.OSVersion = osVersion;
+                            forfeitRecord.RecommendedAction = recommendedAction;
+                            forfeitRecord.RecommendationFollowed = recommendationFollowed;
+                            forfeitRecord.RiskLevel = riskLevel;
+                            forfeitRecord.DealerWinProbability = dealerWinProbability;
 
                             WriteRecordToCSV(forfeitRecord, csvPath);
                             InsertGameRecord(forfeitRecord, dbPath, playerID);
@@ -1680,16 +2066,17 @@ namespace AlexThomasBlackJackProject2026
                         if (strategyOn && playerTotal <= 11 && !lowStandWarningShown)
                         {
                             Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("⚠  Strategy tip: you are standing on " + playerTotal + ".");
-                            Console.WriteLine("   Standing this low gives the dealer a strong advantage.");
-                            Console.ResetColor();
+                            double lowStandDealerWinProb = CalculateDealerWinProbability(playerTotal, dealerVisibleValue);
+                            Console.WriteLine("💡 Tip! HIT. Standing on " + playerTotal +
+                                              " gives the dealer a " + (int)lowStandDealerWinProb +
+                                              "% chance of winning.");
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.Write("   [ENTER] HIT  ");
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.Write("[N] STAND  ");
                             Console.ForegroundColor = ConsoleColor.Cyan;
-                            Console.WriteLine("   [ENTER] Draw instead  [N] Stand anyway  [ESC] Quit");
+                            Console.WriteLine("[ESC] QUIT \n");
                             Console.ResetColor();
-                            // do NOT set gameOver here - wait for the player's next keypress
-                            // if they press N again they confirm the stand
-                            // if they press Enter they draw instead
-                            // the game loop then reads the next keypress
                             lowStandWarningShown = true;
                         }
                         else
@@ -1824,29 +2211,24 @@ namespace AlexThomasBlackJackProject2026
                             gameOver = true;
                             }
 
-                            // STRATEGY WARNING: HIGH DRAW
-                            // only triggers if strategy mode is on AND total is 17 or higher
-                            // AND the hand isn't already over (hitting 21 or busting sets gameOver = true above)
-                            // shows bust percentage - informational only, no gate
-                            // warning appears AFTER the player sees the card they actually drew
-                            // so they understand the consequence of drawing again from their current total
-                            if (strategyOn && playerTotal >= 17 && !gameOver)
-                            {
-                                string bustChance = CalculateBustChance(playerTotal);
-                                Console.ForegroundColor = ConsoleColor.Yellow;
-                                Console.WriteLine("⚠  Strategy tip: your total is " + playerTotal + ".");
-                                Console.WriteLine("   Drawing now carries a " + bustChance + " chance of busting.");
-                                Console.ResetColor();
-                                Console.ForegroundColor = ConsoleColor.Cyan;
-                                Console.WriteLine("   [ENTER] Draw anyway  [N] Stand  [ESC] Quit");
-                                Console.ResetColor();
-                                // warningActive = true means the next draw is an override
-                                // we do not set overrodeSuggestion here because the player
-                                // has not yet chosen to draw again - they may still stand
-                                warningActive = true;
-                            }
+                        // STRATEGY WARNING: HIGH DRAW
+                        // only triggers if strategy mode is on AND total is 17 or higher
+                        // AND the hand isn't already over (hitting 21 or busting sets gameOver = true above)
+                        // shows bust percentage - informational only, no gate
+                        // warning appears AFTER the player sees the card they actually drew
+                        // so they understand the consequence of drawing again from their current total
+                        if (strategyOn && !gameOver)
+                        {
+                            recommendedAction = GetStrategyRecommendation(playerTotal, dealerVisibleValue);
+                            dealerWinProbability = CalculateDealerWinProbability(playerTotal, dealerVisibleValue);
+                            double bustPct = CalculateBustChanceDouble(playerTotal);
+                            riskLevel = GetRiskLevel(bustPct);
+                            PrintStrategyRecommendation(recommendedAction, bustPct,
+                                                        dealerWinProbability, dealerVisibleValue,playerTotal);
+                            warningActive = true;
+                        }
 
-                            }   // closes draw branch
+                    }   // closes draw branch
 
 
                         // STEP 8 = RESOLVE THE HAND
@@ -1979,6 +2361,17 @@ namespace AlexThomasBlackJackProject2026
                         if (playerTotal > 21) stats.PlayerBusts++;
                         if (dealerTotal > 21) stats.DealerBusts++;
 
+                        // determine whether the player followed the strategy recommendation
+                        // STAND = followed if player did not draw beyond opening hand
+                        // HIT = followed if player drew at least once
+                        // NONE = strategy mode was off, no recommendation applicable
+                        if (recommendedAction == "STAND")
+                            recommendationFollowed = (numberOfDraws == 0);
+                        else if (recommendedAction == "HIT")
+                            recommendationFollowed = (numberOfDraws > 0);
+                        else
+                            recommendationFollowed = false;
+
                         // TOKEN ADJUSTMENT
                         if (result == "Win")
                         {
@@ -2043,6 +2436,10 @@ namespace AlexThomasBlackJackProject2026
                         record.PlayerHandWasSoft = aceDropped;
                         record.HandDurationSeconds = (int)(DateTime.Now - handStartTime).TotalSeconds;
                         record.OSVersion = osVersion;
+                        record.RecommendedAction = recommendedAction;
+                        record.RecommendationFollowed = recommendationFollowed;
+                        record.RiskLevel = riskLevel;
+                        record.DealerWinProbability = dealerWinProbability;
 
                         WriteRecordToCSV(record, csvPath);
                         InsertGameRecord(record, dbPath, playerID);
