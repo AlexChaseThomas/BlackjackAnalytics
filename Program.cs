@@ -802,6 +802,62 @@ namespace AlexThomasBlackJackProject2026
             }
         }   // closes InsertGameRecord
 
+        // METHOD: InsertSessionRecord = writes one row to the Sessions table at the start of each session
+        // Captures:  SessionID, PlayerID, Username, StartTime, and StartBalance
+        // EndTime, TotalHands, EndBalance, and NetProfit are updated at session end via UpdateSessionRecord()
+        // separating INSERT and UPDATE mirrors how real session tracking works = the session exists in the database from the moment it starts, not just when it ends
+        static void InsertSessionRecord(int sessionID, int playerID, string username,
+                                         string startTime, int startBalance, string dbPath)
+        {
+            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                        INSERT OR IGNORE INTO Sessions (
+                            SessionID, PlayerID, Username, StartTime, StartBalance
+                        ) VALUES (
+                            @sessionID, @playerID, @username, @startTime, @startBalance
+                        )";
+                    // INSERT OR IGNORE = if this SessionID already exists (e.g. recursive Main() call)
+                    // do nothing rather than throwing an error
+                    cmd.Parameters.AddWithValue("@sessionID", sessionID);
+                    cmd.Parameters.AddWithValue("@playerID", playerID);
+                    cmd.Parameters.AddWithValue("@username", username);
+                    cmd.Parameters.AddWithValue("@startTime", startTime);
+                    cmd.Parameters.AddWithValue("@startBalance", startBalance);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }   // closes InsertSessionRecord
+
+        // METHOD: UpdateSessionRecord =  updates the Sessions row at the end of the session with final stats
+        // called once after both loops exit, before the session summary prints
+        static void UpdateSessionRecord(int sessionID, string endTime, int totalHands,
+                                         int endBalance, int netProfit, string dbPath)
+        {
+            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                        UPDATE Sessions
+                        SET EndTime    = @endTime,
+                            TotalHands = @totalHands,
+                            EndBalance = @endBalance,
+                            NetProfit  = @netProfit
+                        WHERE SessionID = @sessionID";
+                    cmd.Parameters.AddWithValue("@endTime", endTime);
+                    cmd.Parameters.AddWithValue("@totalHands", totalHands);
+                    cmd.Parameters.AddWithValue("@endBalance", endBalance);
+                    cmd.Parameters.AddWithValue("@netProfit", netProfit);
+                    cmd.Parameters.AddWithValue("@sessionID", sessionID);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }   // closes UpdateSessionRecord
         static int CheckDailyBonusDB(string username, int currentBalance, string loginTime, string dbPath, out double hoursUntilBonus)
         {
             hoursUntilBonus = 0;
@@ -1070,8 +1126,9 @@ namespace AlexThomasBlackJackProject2026
             Console.ForegroundColor = ConsoleColor.Yellow;
             if (recommendation == "HIT")
             {
-                Console.WriteLine("💡 Tip! HIT. The dealer's position is " + dealerStrength +
-                                  " (" + (int)dealerWinProb + "% chance dealer wins if you stand).");
+                Console.WriteLine("💡 Tip! HIT. The dealer has a " + (int)dealerWinProb +
+                                   "% chance of winning if you stand, the dealer's position is " +
+                                   dealerStrength + ".");
             }
             else
             {
@@ -1370,6 +1427,10 @@ namespace AlexThomasBlackJackProject2026
             // after this line, hoursUntilBonus holds either 0 (bonus awarded or new player)
             // or the decimal hours remaining until their next bonus
 
+            int sessionStartBalance = tokenBalance;
+            // snapshot taken after daily bonus is applied
+            // used at session end to calculate NetProfit = endBalance - sessionStartBalance
+
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("Session ID           : " + sessionID);
             Console.WriteLine("Session started      : " + loginTime);
@@ -1441,6 +1502,11 @@ namespace AlexThomasBlackJackProject2026
                 ? "Basic strategy suggestions ON.\n"
                 : "Basic strategy suggestions OFF.\n");
             Console.ResetColor();
+
+            // INSERT session row now — before first hand is dealt
+            // EndTime, TotalHands, EndBalance, NetProfit filled in at session end
+            InsertSessionRecord(sessionID, playerID, player.Username,
+                                loginTime, tokenBalance, dbPath);
 
             // STEP 5 = BUILD AND SHUFFLE THE DECK
             // BuildDeck() creates all 52 cards - 13 values x 4 suits
@@ -2468,6 +2534,10 @@ namespace AlexThomasBlackJackProject2026
 
             }   // closes session loop (while sessionActive)
 
+            // UPDATE session row with final stats now that session is complete
+            string sessionEndTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            UpdateSessionRecord(sessionID, sessionEndTime, stats.TotalGames,
+                                tokenBalance, tokenBalance - sessionStartBalance, dbPath);
 
             // STEP 10 = END OF SESSION
             // both loops exited - session is over
