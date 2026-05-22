@@ -847,6 +847,39 @@ namespace AlexThomasBlackJackProject2026
                 }
             }
         }   // closes UpdateSessionRecord
+
+        // METHOD: UpdatePlayerLifetimeStats
+        // updates the Players table with cumulative lifetime stats at the end of each session
+        // TotalHandsAllTime and TotalWinsAllTime use += so they accumulate across all sessions
+        // FavoriteStrategyMode updates to the current session's choice
+        // called once per session after both loops exit
+        static void UpdatePlayerLifetimeStats(string username, int handsThisSession,
+                                               int winsThisSession, bool strategyOn, string dbPath)
+        {
+            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                        UPDATE Players
+                        SET TotalHandsAllTime    = TotalHandsAllTime + @hands,
+                            TotalWinsAllTime     = TotalWinsAllTime  + @wins,
+                            FavoriteStrategyMode = @strategyMode
+                        WHERE Username = @username";
+                    // TotalHandsAllTime + @hands = SQL-side increment
+                    // this is safer than read-modify-write in C# because it avoids
+                    // race conditions if two sessions ever ran simultaneously
+                    cmd.Parameters.AddWithValue("@hands", handsThisSession);
+                    cmd.Parameters.AddWithValue("@wins", winsThisSession);
+                    cmd.Parameters.AddWithValue("@strategyMode", strategyOn ? "On" : "Off");
+                    cmd.Parameters.AddWithValue("@username", username);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }   // closes UpdatePlayerLifetimeStats
+
+        // METHOD: CheckDailyBonusDB = 
         static int CheckDailyBonusDB(string username, int currentBalance, string loginTime, string dbPath, out double hoursUntilBonus)
         {
             hoursUntilBonus = 0;
@@ -2544,6 +2577,10 @@ namespace AlexThomasBlackJackProject2026
             string sessionEndTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             UpdateSessionRecord(sessionID, sessionEndTime, stats.TotalGames,
                                 tokenBalance, tokenBalance - sessionStartBalance, dbPath);
+
+            // UPDATE player's lifetime stats now that session is complete
+            UpdatePlayerLifetimeStats(player.Username, stats.TotalGames,
+                                       stats.PlayerWins, stats.StrategyModeOn, dbPath);
 
             // STEP 10 = END OF SESSION
             // both loops exited - session is over
