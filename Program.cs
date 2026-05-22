@@ -677,18 +677,7 @@ namespace AlexThomasBlackJackProject2026
                             int balance = reader.GetInt32(1);
                             int longestWinStreak = reader.GetInt32(2);
 
-                            // update LastSeen
-                            using (var updateCmd = new SQLiteCommand(connection))
-                            {
-                                updateCmd.CommandText = @"
-                                    UPDATE Players
-                                    SET LastSeen = @loginTime
-                                    WHERE Username = @username";
-                                updateCmd.Parameters.AddWithValue("@loginTime", loginTime);
-                                updateCmd.Parameters.AddWithValue("@username", username);
-                                updateCmd.ExecuteNonQuery();
-                            }
-
+                            
                             return (balance, playerID, longestWinStreak);
                         }
                     }
@@ -912,6 +901,19 @@ namespace AlexThomasBlackJackProject2026
                         Console.ForegroundColor = ConsoleColor.Yellow;
                         Console.WriteLine("Daily bonus available in: " + Math.Round(hoursUntilBonus, 1) + " hours.\n");
                         Console.ResetColor();
+
+                        // update LastSeen to now so the countdown is accurate next login
+                        using (var updateCmd = new SQLiteCommand(connection))
+                        {
+                            updateCmd.CommandText = @"
+                                UPDATE Players
+                                SET LastSeen = @loginTime
+                                WHERE Username = @username";
+                            updateCmd.Parameters.AddWithValue("@loginTime", loginTime);
+                            updateCmd.Parameters.AddWithValue("@username", username);
+                            updateCmd.ExecuteNonQuery();
+                        }
+
                         return currentBalance;
                     }
                 }
@@ -1132,9 +1134,18 @@ namespace AlexThomasBlackJackProject2026
             }
             else
             {
-                double dealerBustProb = CalculateDealerBustProbability(dealerVisibleValue);
-                Console.WriteLine("💡 Tip! STAND. The dealer has a " + (int)dealerBustProb +
-                                  "% chance of busting, the bust rate for hitting is " + bustDisplay + ".");
+                int playerWinProb = 100 - (int)dealerWinProb;
+                if (dealerVisibleValue >= 4 && dealerVisibleValue <= 6)
+                {
+                    double dealerBustProb = CalculateDealerBustProbability(dealerVisibleValue);
+                    Console.WriteLine("💡 Tip! STAND. The dealer has a " + (int)dealerBustProb +
+                                      "% chance of busting - hitting carries a " + bustDisplay + " bust risk.");
+                }
+                else
+                {
+                    Console.WriteLine("💡 Tip! STAND. You have a " + playerWinProb +
+                          "% chance of winning if you stand — hitting carries a " + bustDisplay + " bust risk.");
+                }
             }
 
             if (recommendation == "HIT")
@@ -1155,6 +1166,7 @@ namespace AlexThomasBlackJackProject2026
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine("[ESC] QUIT");
             }
+            Console.WriteLine();
             Console.ResetColor();
         }   // closes PrintStrategyRecommendation
 
@@ -1247,6 +1259,8 @@ namespace AlexThomasBlackJackProject2026
 
         static void Main() // This is the entry point of every C# program, when you run your program, C# scans your code looking specifically for a method called Main (C# STARTS EXECUTING HERE)
         {
+            Console.Clear();
+
             // STEP 1 = WELCOME SCREEN
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("╔══════════════════════════════════════╗");
@@ -1720,16 +1734,17 @@ namespace AlexThomasBlackJackProject2026
                     while (Console.KeyAvailable) Console.ReadKey(true);
 
                     Console.ForegroundColor = ConsoleColor.White;
-                    Console.Write("Dealer revealing...");
+                    Console.Write("Dealer revealing hole card...");
                     Thread.Sleep(1500);
+                    // clear the revealing line — hole card is implied by its position in the hand
                     Console.SetCursorPosition(0, Console.CursorTop);
-                    Console.Write("                                        ");
+                    Console.Write(new string(' ', Console.WindowWidth));
                     Console.SetCursorPosition(0, Console.CursorTop);
-                    Console.WriteLine("\nDealer reveals hole card: " + dealerHoleCard);
                     PrintDealerHand(dealerHand);
                     Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("\nDealer total: " + dealerTotal + "\n");
+                    Console.WriteLine("Dealer total: " + dealerTotal + "\n");
                     Console.ResetColor();
+                    Thread.Sleep(800);
 
                     // dealer must still draw to 17 even when player has Blackjack
                     // the dealer does not concede early - house rules require drawing to 17
@@ -1753,12 +1768,11 @@ namespace AlexThomasBlackJackProject2026
 
                         dealerHand.Add(dealerCard);
                         Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine("Dealer drew:  " + dealerCard);
                         PrintDealerHand(dealerHand);
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("\nDealer total: " + dealerTotal + "\n");
+                        Console.WriteLine("Dealer total: " + dealerTotal + "\n");
                         Console.ResetColor();
-
+                        Thread.Sleep(1000);
                     }
 
                     // determine result after dealer has finished drawing
@@ -1884,20 +1898,22 @@ namespace AlexThomasBlackJackProject2026
                     while (Console.KeyAvailable) Console.ReadKey(true);
 
                     Console.ForegroundColor = ConsoleColor.White;
-                    Console.Write("Dealer revealing...");
+                    Console.Write("Dealer revealing hole card...");
                     Thread.Sleep(1500);
+                    // clear the revealing line — hole card is implied by its position in the hand
                     Console.SetCursorPosition(0, Console.CursorTop);
-                    Console.Write("                                        ");
+                    Console.Write(new string(' ', Console.WindowWidth));
                     Console.SetCursorPosition(0, Console.CursorTop);
-                    Console.WriteLine("Dealer reveals hole card: " + dealerHoleCard);
                     PrintDealerHand(dealerHand);
                     Console.ForegroundColor = ConsoleColor.Yellow;
                     Console.WriteLine("Dealer total: " + dealerTotal + "\n");
                     Console.ResetColor();
+                    Thread.Sleep(800);
 
                     Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine("Dealer has 21! Hand over.\n");
                     Console.ResetColor();
+                    Thread.Sleep(800);
 
                     string naturalResult = DetermineWinner(playerTotal, dealerTotal);
 
@@ -2320,26 +2336,16 @@ namespace AlexThomasBlackJackProject2026
                         // prints the suspense line
                         Console.ForegroundColor = ConsoleColor.White;
                         Console.Write("Dealer revealing hole card...");
-
-                        // pause for dramatic effect
                         Thread.Sleep(1500);
-
-                        // move cursor back to the start of this line
+                        // clear the revealing line — hole card is implied by its position in the hand
                         Console.SetCursorPosition(0, Console.CursorTop);
-
-                        // overwrite with blank spaces to clear the old text
-                        // 40 spaces covers the full width of our UI
-                        Console.Write("                                        ");
-
-                        // move cursor back to start of line again
+                        Console.Write(new string(' ', Console.WindowWidth));
                         Console.SetCursorPosition(0, Console.CursorTop);
-
-                        // now print the actual card reveal
-                        Console.WriteLine("\nDealer reveals hole card: " + dealerHoleCard);
                         PrintDealerHand(dealerHand);
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine("\nDealer total: " + dealerTotal + "\n");
+                        Console.WriteLine("Dealer total: " + dealerTotal + "\n");
                         Console.ResetColor();
+                        Thread.Sleep(800);
 
                         // dealer always draws to 17 regardless of whether player busted
                         // this ensures DealerTotal in the CSV reflects the actual final hand
@@ -2362,11 +2368,11 @@ namespace AlexThomasBlackJackProject2026
                             }
                             dealerHand.Add(dealerCard);
                             Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine("Dealer drew:  " + dealerCard);
                             PrintDealerHand(dealerHand);
                             Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("\nDealer total: " + dealerTotal + "\n");
+                            Console.WriteLine("Dealer total: " + dealerTotal + "\n");
                             Console.ResetColor();
+                            Thread.Sleep(1000);
                         }
 
                         // DetermineWinner() extracts the result logic into its own method
