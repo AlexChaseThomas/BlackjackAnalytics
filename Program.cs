@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
 using System.Threading;
-using static System.Net.Mime.MediaTypeNames;
 
 
 
@@ -13,17 +12,43 @@ namespace AlexThomasBlackJackProject2026
     // BLACKJACK ANALYTICS — C# Console Application
     // Author  : Alex Thomas
     // GitHub  : https://github.com/AlexChaseThomas/BlackjackAnalytics
-    // Version : Phase 3 — 52-card deck, proper deal order, double down
+    // Version : Phase 3 Complete — SQLite integration, live analytics, strategy engine
     // ══════════════════════════════════════════════════════════════════
     //
+    // PURPOSE:
+    //   End-to-end behavioral analytics pipeline. The game functions as a
+    //   data collection layer — every hand, decision, and outcome is written
+    //   to a local SQLite database in real time. Phase 4 will use Python to
+    //   generate synthetic data at scale. Phase 5 will visualize insights
+    //   in Power BI. This file is the C# layer of that pipeline.
+    //
+    // ARCHITECTURE:
+    //   C# Console App → SQLite (blackjack.db) → Python → Power BI
+    //
     // DATA CLASSES (POCOs):
-    //   PlayerInfo    — player identity (username only, no PII)
-    //   Card          — single playing card with name and suit
-    //   SessionRecord — one row of analytics data per hand
-    //   GameStats     — session-level counters
+    //   PlayerInfo     — player identity (username only, no PII stored)
+    //   Card           — single playing card with name and suit
+    //   SessionRecord  — one row of analytics data written per hand
+    //   GameStats      — session-level counters accumulated across hands
+    //   SessionSummary — one row per session written to the Sessions table
+    //
+    // DATABASE TABLES:
+    //   Players      — one row per unique player, lifetime stats and balance
+    //   Sessions     — one row per session, start/end balance, net profit
+    //   GameSessions — one row per hand, 29 columns of behavioral telemetry
     //
     // LOGIC CLASS:
     //   BlackjackGame — all methods and Main() entry point
+    //
+    // KEY DESIGN DECISIONS:
+    //   - Hand enumeration model: dealer win probability calculated dynamically
+    //     from current game state rather than a static lookup table
+    //   - Weighted probability tree traversal: SimulateDealerDraw uses recursive
+    //     ref parameters to accumulate outcomes across all possible draw sequences
+    //   - PII policy: full date of birth entered for age verification only,
+    //     immediately discarded — only the calculated age integer is stored
+    //   - Sessions INSERT at start, UPDATE at end: session exists in the database
+    //     from the moment it begins, not just when it completes
     // ══════════════════════════════════════════════════════════════════
 
     // PlayerInfo = a data class that stores who the player is 
@@ -106,10 +131,10 @@ namespace AlexThomasBlackJackProject2026
 
     public class GameStats
     {
-        // Game results tracking 
+        // Game results tracking = counters incremented after each hand resolves 
         public int TotalGames = 0;
         public int PlayerWins = 0;
-        public int DealerWins = 0;
+        public int DealerWins = 0; // dealer wins = player losses
         public int Ties = 0;
         public int PlayerBusts = 0;
         public int DealerBusts = 0;
@@ -121,8 +146,9 @@ namespace AlexThomasBlackJackProject2026
         public int SuggestionsOverridden = 0;
     }
 
-    // SessionSummary = one row per session in the Sessions table
-    // captures session-level analytics that would otherwise require aggregation derived from GameSessions
+    // SessionSummary = a data class that mirrors one row of the Sessions table
+    // Captured once per session — start balance, end balance, net profit, total hands
+    // Stored separately from GameSessions so session-level queries do not require aggregation across every hand row — direct reads from Sessions are faster and cleaner
 
     public class SessionSummary
     {
@@ -199,7 +225,7 @@ namespace AlexThomasBlackJackProject2026
         }   // closes ShuffleDeck
 
         // METHOD: DealCard = takes the top card from the deck and removes it
-        // if the deck runs low (i.e. fewer than 10 cards) it reshuffles automatically = prevents us from running out of cards mid-hand 
+        // If the deck runs low (i.e. fewer than 10 cards) it reshuffles automatically = prevents us from running out of cards mid-hand 
         static Card DealCard(List<Card> deck)
         {
             // reshuffle if deck is running low
@@ -271,9 +297,7 @@ namespace AlexThomasBlackJackProject2026
         }
         // closes CalculateBustChance
 
-        // METHOD: CalculateBustChanceDouble
-        // same logic as CalculateBustChance() but returns a double instead of a formatted string
-        // used by the strategy recommendation system which needs the raw number for category thresholds
+        // METHOD: CalculateBustChanceDouble =  same logic as CalculateBustChance() but returns a double instead of a formatted string = used by the strategy recommendation system which needs the raw number for category thresholds
         static double CalculateBustChanceDouble(int currentTotal)
         {
             int safeRoom = 21 - currentTotal;
@@ -304,9 +328,11 @@ namespace AlexThomasBlackJackProject2026
             return (double)bustCount / totalTypes * 100;
         }   // closes CalculateBustChanceDouble
 
-        // METHOD: Initialize Database = creates the SQLite database file and both tables on the first run 
-        // IF NOT EXISTS means this is safe to call every time the program starts
-        // if the tables already exist = nothing happens = no data lost
+        // METHOD: InitializeDatabase = creates the blackjack.db file and all three tables on first run
+        // Safe to call on every program start — IF NOT EXISTS means no data is ever overwritten
+        // Execution order matters: Players must exist before Sessions (foreign key reference)
+        // Sessions must exist before GameSessions (foreign key reference)
+        // Called once at the top of Main() before any player data is read or written
         static void InitializeDatabase(string dbPath)
         {
             using (var connection = new SQLiteConnection("Data Source=" + dbPath))
@@ -391,142 +417,8 @@ namespace AlexThomasBlackJackProject2026
             }
         }   // closes InitializeDatabase
 
-        // METHOD: LoadPlayerBalance
-        // reads the CSV to find the last recorded token balance for this player
-        // new players or first run ever returns 100 as the starting balance
-        // this is how balance persists across sessions without a database
-        // NOTE: column indexes - Username=1, PlayerAge=2, LoginTime=3, TokensAfter=13
-        static int LoadPlayerBalance(string username, string csvPath)
-        {
-            // if the CSV doesn't exist yet = this is a brand new, first run 
-            if (!File.Exists(csvPath))
-                return 100; // NEW PLAYERS = start with 100 tokens 
-
-            // File.ReadAllLines() reads the entire CSV into a string array
-            // Each element = one row of the file 
-            string[] lines = File.ReadAllLines(csvPath);
-
-            // Need at least 2 lines = header row + at least one data row 
-            if (lines.Length < 2)
-                return 100;
-
-            // loop backwards through the file from bottom to top = the last row matching this player = their most recent balance 
-            for (int i = lines.Length - 1; i >= 1; i--)
-            // i starts at last line, i >= 1 skips the header at index 0
-            // i-- counts downwards toward the top of the file 
-            {
-                // .Split(',') breaks the row string into an array of field values 
-                // splits wherever it finds a comma - same structure as the row that we wrote
-                string[] fields = lines[i].Split(',');
-
-                // fields[1] = Username column (second column, index 1)
-                if (fields[1] == username)
-                {
-                    // fields[13] = TokensAfter column (14th column, index 13)
-                    // int.TryParse safely converts the string to an int 
-                    if (int.TryParse(fields[13], out int balance))
-                        return balance;
-                }
-            }
-            // username not found anywhere in the file = brand new player
-            return 100;
-        }   // closes LoadPlayerBalance
-
-        // METHOD: CheckDailyBonus
-        // The CSV already records LoginTime for every row. To check if 24 hours have passed, we read the player's most recent LoginTime from the CSV and compare it to right now. If the difference is 24 hours or more, they get the bonus.
-        static int CheckDailyBonus(string username, string csvPath, int currentBalance, out double hoursUntilBonus)
-        // 'out double hoursUntilBonus' = an output parameter
-        // out = the method writes a value directly into this variable from the outside
-        // same 'out' concept you already know from int.TryParse and DateTime.TryParse
-        // this lets the method return TWO pieces of information at once:
-        // the int return value = the (possibly updated) balance
-        // the out parameter = hours remaining until next bonus (0 if bonus was awarded)
-        {
-            hoursUntilBonus = 0;
-            // default value = 0 = either bonus was awarded or no data found
-            // out parameters MUST be assigned before the method returns
-            // C# requires this - it won't compile if any code path leaves it unset
-
-            // if no CSV exists yet = first ever run = no bonus applicable 
-            if (!File.Exists(csvPath))
-                return currentBalance;
-
-            string[] lines = File.ReadAllLines(csvPath);
-
-            // need at least a header and one data row to find a login time 
-            if (lines.Length < 2)
-                return currentBalance;
-
-            // loop backwards to find the most recent row for this player
-            // same pattern as LoadPlayerBalance - backwards = most recent first 
-            for (int i = lines.Length - 1; i >= 1; i--)
-            {
-                string[] fields = lines[i].Split(',');
-
-                // fields[1] = Username column - check this row belongs to our player first
-                if (fields[1] == username)
-                {
-                    // fields[3] = LoginTime column (fourth column, index 3)
-                    // Username=1, PlayerAge=2, LoginTime=3 - same indexes as before
-                    // DateTime.TryParse converts the stored string back into a DateTime
-                    // same pattern as DOB validation 
-                    if (DateTime.TryParse(fields[3], out DateTime lastLogin))
-                    {
-                        // DateTime.Now - lastLogin gives a TimeSpan
-                        // TimeSpan = built-in C# type that represents a duration of time 
-                        // .TotalHours gives the total number of hours in that duration as a double 
-                        TimeSpan timeSinceLastLogin = DateTime.Now - lastLogin;
-
-                        // **** subtracting two DateTimes ALWAYS produces a TimeSpan ****
-                        // e.g. if now is 3pm and lastLogin was 1pm, timeSinceLastLogin = 2 hours
-
-                        if (timeSinceLastLogin.TotalHours >= 24)
-                        {
-                            // 24 hours have passed - award the bonus
-                            int newBalance = currentBalance + 50;
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("╔══════════════════════════════════════╗");
-                            Console.WriteLine("║       🎁  DAILY BONUS AWARDED!        ║");
-                            Console.WriteLine("║    +50 tokens added to your balance  ║");
-                            Console.WriteLine("╚══════════════════════════════════════╝");
-                            Console.WriteLine("Previous balance : " + currentBalance + " tokens");
-                            Console.WriteLine("New balance      : " + newBalance + " tokens\n");
-                            Console.ResetColor();
-                            return newBalance;
-                            // return the updated balance with bonus applied
-                        }
-                        else
-                        {
-                            // less than 24 hours have passed = no bonus yet 
-                            // calculate how long until they can get the next one
-                            hoursUntilBonus = 24 - timeSinceLastLogin.TotalHours;
-                            // write the hours remaining into the out parameter
-                            // Main() can now read this value after calling the method
-
-                            Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("Daily bonus available in: "
-                                   + Math.Round(hoursUntilBonus, 1) + " hours.\n");
-                            // Math.Round(value, 1) rounds to 1 decimal place
-                            // e.g. 3.7333 hours becomes "3.7 hours"
-                            Console.ResetColor();
-                            return currentBalance;
-                            // return balance unchanged - no bonus yet
-                        }
-                    }
-
-                    // JUST IN CASE
-                    // if we found the player row but could not parse the date (i.e. the date in csv was invalid)
-                    return currentBalance;
-                }
-            }
-
-            // player not found in CSV at all = new player = no bonus applicable
-            return currentBalance;
-        }   // closes CheckDailyBonus
-
-        // METHOD: DetermineWinner
-        // takes the player's final total and the dealer's final total = returns the result as a plain string: "Win", "Loss", or "Tie"
-        // extracted from Main() so the logic all lives in one place = DRY principle 
+        // METHOD: DetermineWinner = takes the player's final total and the dealer's final total = returns the result as a plain string: "Win", "Loss", or "Tie"
+        // Extracted from Main() so the logic all lives in one place = DRY principle 
         // Win/Loss Changes = only need to be changed once here 
         // Order Matters: most specific cases come first so that they aren't missed by more general conditions being placed at the start 
         static string DetermineWinner(int playerTotal, int dealerTotal)
@@ -557,58 +449,6 @@ namespace AlexThomasBlackJackProject2026
             // final case = no condition needed = only possibility left is equal totals
         }   // closes DetermineWinner
 
-        // METHOD: WriteRecordToCSV
-        static void WriteRecordToCSV(SessionRecord record, string csvPath)
-        {
-            bool fileExists = File.Exists(csvPath);
-            // File.Exists() checks whether the CSV already exists
-            // returns true or false - same bool pattern you already know
-
-            using (StreamWriter writer = new StreamWriter(csvPath, true))
-            // StreamWriter writes text to a file line by line
-            // 'true' = append mode - each new row adds to the bottom
-            // 'using' statement = automatically closes and saves the file
-            // when the block finishes, even if something goes wrong
-            {
-                if (!fileExists)
-                // write the header row on the very first run only
-                // after that fileExists = true and this is skipped forever
-                {
-                    writer.WriteLine(
-                        "SessionID,Username,PlayerAge,LoginTime," +
-                        "GameNumber,PlayerTotal,DealerTotal," +
-                        "Result,PlayerBusted,DealerBusted,NumberOfDraws," +
-                        "BetAmount,TokensBefore,TokensAfter," +
-                        "StrategyMode,OverrodeSuggestion,DoubledDown"
-                    // ***** order must match the data row below - EXACTLY *****
-                    );
-                }
-
-                // write the data row
-                // each field separated by a comma = CSV (comma separated values)
-                // this is all a CSV file is - plain text with commas between values
-                writer.WriteLine(
-                    record.SessionID + "," +
-                    record.Username + "," +
-                    record.PlayerAge + "," +
-                    record.LoginTime + "," +
-                    record.GameNumber + "," +
-                    record.PlayerTotal + "," +
-                    record.DealerTotal + "," +
-                    record.Result + "," +
-                    record.PlayerBusted + "," +
-                    record.DealerBusted + "," +
-                    record.NumberOfDraws + "," +
-                    record.BetAmount + "," +
-                    record.TokensBefore + "," +
-                    record.TokensAfter + "," +
-                    record.StrategyMode + "," +
-                    record.OverrodeSuggestion + "," +
-                    record.DoubledDown
-
-                );
-            }   // StreamWriter closes and saves automatically here
-        }   // closes WriteRecordToCSV
 
         // METHOD: PrintPlayerHand = prints all cards in the player's current hand 
         // Method gets called after every draw so that the player can always view their full hand
@@ -651,7 +491,11 @@ namespace AlexThomasBlackJackProject2026
         } // closes PrintDealerHand
 
         // METHOD: RegisterOrLoginPlayer = checks if the username exits in the player table (yes = existing player = load TokenBalance, no = new player = insert a row with 100 starting tokens)
-        // REPLACES: LoadPlayerBalance() and the CSV-based balance lookup
+        // Returns a C# tuple — three values packed into one return statement:
+        //   balance          = token balance to start the session with
+        //   playerID         = primary key used to link GameSessions and Sessions rows
+        //   longestWinStreak = loaded so the in-session counter can build on lifetime best
+        // REPLACES: LoadPlayerBalance() which read balance from the CSV
         static (int balance, int playerID, int longestWinStreak) RegisterOrLoginPlayer(
              string username, int playerAge, string loginTime, string dbPath)
         {
@@ -707,11 +551,9 @@ namespace AlexThomasBlackJackProject2026
         }   // closes RegisterOrLoginPlayer
 
         // METHOD: InsertGameRecord = inserts one completed hand into the GameSessions table + updates the player's TokenBalance in the Player's table
-        // REPLACES: WriteRecordToCSV()
-        // METHOD: InsertGameRecord
-        // inserts one completed hand into the GameSessions table
-        // also updates the player's TokenBalance in the Players table
-        // REPLACES: WriteRecordToCSV()
+        // Called once at the end of every hand including forfeits, blackjacks, and naturals
+        // The two operations share one connection — open once, write both, close once
+        // REPLACES: WriteRecordToCSV() from Phase 2
         static void InsertGameRecord(SessionRecord record, string dbPath, int playerID)
         {
             using (var connection = new SQLiteConnection("Data Source=" + dbPath))
@@ -822,7 +664,7 @@ namespace AlexThomasBlackJackProject2026
         }   // closes InsertSessionRecord
 
         // METHOD: UpdateSessionRecord =  updates the Sessions row at the end of the session with final stats
-        // called once after both loops exit, before the session summary prints
+        // Called once after both loops exit, before the session summary prints
         static void UpdateSessionRecord(int sessionID, string endTime, int totalHands,
                                          int endBalance, int netProfit, string dbPath)
         {
@@ -848,11 +690,10 @@ namespace AlexThomasBlackJackProject2026
             }
         }   // closes UpdateSessionRecord
 
-        // METHOD: UpdatePlayerLifetimeStats
-        // updates the Players table with cumulative lifetime stats at the end of each session
+        // METHOD: UpdatePlayerLifetimeStats =  updates the Players table with cumulative lifetime stats at the end of each session
         // TotalHandsAllTime and TotalWinsAllTime use += so they accumulate across all sessions
         // FavoriteStrategyMode updates to the current session's choice
-        // called once per session after both loops exit
+        // Called once per session after both loops exit
         static void UpdatePlayerLifetimeStats(string username, int handsThisSession,
                                                int winsThisSession, bool strategyOn, string dbPath)
         {
@@ -879,7 +720,11 @@ namespace AlexThomasBlackJackProject2026
             }
         }   // closes UpdatePlayerLifetimeStats
 
-        // METHOD: CheckDailyBonusDB = 
+        // METHOD: CheckDailyBonusDB = reads LastSeen from the Players table and compares it to the current login time
+        // If 24 or more hours have passed since last login = award 50 tokens + update LastSeen to now 
+        // If less than 24 hours have passed = show countdown to next bonus and update LastSeen to now 
+        // Updating LastSeen on every login (bonus or not) = maintains the countdown's accuracy
+        // REPLACES: CheckDailyBonus) which read LoginTime from the CSV
         static int CheckDailyBonusDB(string username, int currentBalance, string loginTime, string dbPath, out double hoursUntilBonus)
         {
             hoursUntilBonus = 0;
@@ -955,7 +800,7 @@ namespace AlexThomasBlackJackProject2026
 
         // METHOD: GetStrategyRecommendation = takes the player's cirremt total and the dealer's visible card value = returns "Hit" or "Stand" according to blackjack basic strategy rules
         // Basic Strategy: when dealer is weak (2-6) the dealer busts often — stand on lower totals & when dealer is strong (7-Ace) the dealer rarely busts — hit more aggressively
-        // same logic used in published casino strategy cards BUT the difference is that we calculate the supporting probability in realtime rather than from a lookup table
+        // Same logic used in published casino strategy cards BUT the difference is that we calculate the supporting probability in realtime rather than from a lookup table
         static string GetStrategyRecommendation(int playerTotal, int dealerVisibleValue)
         {
             // always stand on 17 or higher regardless of dealer card
@@ -982,10 +827,10 @@ namespace AlexThomasBlackJackProject2026
         } // closes GetStrategyRecommendation
 
         // METHOD: CalculateDealerWinProbability = hand enumeration model = calculates the probability the dealer beats the player's current total
-        // assumes the player stands at their current total (does not draw again)
-        // enumerates all possible dealer hole cards weighted by deck frequency 
-        // for each hole card = simulates the dealer drawing to 17 using expected value weighting 
-        // returns dealer win probability as a double 
+        // Assumes the player stands at their current total (does not draw again)
+        // Enumerates all possible dealer hole cards weighted by deck frequency 
+        // For each hole card = simulates the dealer drawing to 17 using expected value weighting 
+        // Returns dealer win probability as a double 
 
         // WHY THIS APPROACH INSTEAD OF A BASIC STRATEGY TABLE:
         // Standard casino strategy card and many online gambling platforms implement recommendations as a static lookup table (e.g. player 16 vs dealer 10 = hit, regardless of the actual gamestate i.e. which specific combinations of cards were dealt) 
@@ -1122,7 +967,7 @@ namespace AlexThomasBlackJackProject2026
 
         // METHOD: GetRiskLevel = converts a bust percentage to a human-readable risk category 
         // Categories are processed faster than raw percentages for in-game decisions 
-        // raw percentage is still displayed alongside for analytical transparency
+        // Raw percentage is still displayed alongside for analytical transparency
         static string GetRiskLevel(double bustChance)
         {
             if (bustChance <= 30) return "LOW";
@@ -1140,11 +985,11 @@ namespace AlexThomasBlackJackProject2026
         }   // closes GetDealerStrength
 
         // METHOD: PrintStrategyRecommendation
-        // two-tier display system based on decision stakes
-        // total 11 or lower  — no display, data still captured, player cannot bust
-        // total 12 or higher — inline tip with color-coded controls
+        // Two-tier display system based on decision stakes
+        // Total 11 or lower  — no display, data still captured, player cannot bust
+        // Total 12 or higher — inline tip with color-coded controls
         // green = recommended action, red = override action, cyan = quit
-        // mirrors how real strategy cards work — guidance only when the decision is meaningful
+        // Mirrors how real strategy cards work — guidance only when the decision is meaningful
         static void PrintStrategyRecommendation(string recommendation, double bustChance,
                                                  double dealerWinProb, int dealerVisibleValue,
                                                  int playerTotal)
@@ -1203,10 +1048,9 @@ namespace AlexThomasBlackJackProject2026
             Console.ResetColor();
         }   // closes PrintStrategyRecommendation
 
-        // METHOD: CalculateDealerBustProbability
-        // calculates the probability the dealer busts from their visible card
-        // used in STAND recommendations to explain why standing is correct
-        // a weak dealer card = high bust probability = good reason to stand
+        // METHOD: CalculateDealerBustProbability = calculates the probability the dealer busts from their visible card
+        // Used in STAND recommendations to explain why standing is correct
+        // A weak dealer card = high bust probability = good reason to stand
         static double CalculateDealerBustProbability(int dealerVisibleValue)
         {
             Dictionary<int, int> cardWeights = new Dictionary<int, int>()
@@ -1249,10 +1093,10 @@ namespace AlexThomasBlackJackProject2026
         }   // closes CalculateDealerBustProbability
 
         // METHOD: SimulateDealerBust = recursive helper for CalculateDealerBustProbability
-        // mirrors SimulateDealerDraw but tracks bust outcomes instead of win outcomes
-        // walks every possible dealer draw sequence weighted by card probability
-        // when the dealer reaches 17 or higher, checks if they busted (total > 21)
-        // adds the path weight to dealerBusts if bust, totalOutcomes regardless
+        // Mirrors SimulateDealerDraw but tracks bust outcomes instead of win outcomes
+        // Walks every possible dealer draw sequence weighted by card probability
+        // When the dealer reaches 17 or higher, checks if they busted (total > 21)
+        // Adds the path weight to dealerBusts if bust, totalOutcomes regardless
         static void SimulateDealerBust(int dealerTotal, int dealerAces,
                                         double weight, int totalWeight,
                                         Dictionary<int, int> cardWeights,
@@ -1285,6 +1129,230 @@ namespace AlexThomasBlackJackProject2026
                                    ref dealerBusts, ref totalOutcomes);
             }
         }   // closes SimulateDealerBust
+
+        // METHOD: PrintQuerySummary = runs 3 live SQL queries against blackjack.db at session end
+        // Same reveal pattern as dealer card reveal
+       
+        // Query 1: current session metrics — hands, win rate, net profit, recommendation adherence
+        // Query 2: strategy recommendation performance — win rate followed vs ignored (lifetime)
+        // Query 3: decision latency analysis — win rate by decision speed bucket (lifetime)
+        // Footer Query: total records, sessions, and players in the database across all time = giving user immediate context for statiscal weight of the numbers above
+        static void PrintQuerySummary(int sessionID, string dbPath, int netProfit)
+        {
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine("\n╔══════════════════════════════════════╗");
+            Console.WriteLine("║     LIVE DATABASE ANALYTICS          ║");
+            Console.WriteLine("╚══════════════════════════════════════╝");
+            Console.ResetColor();
+
+            // loading animation — makes the query process visible on screen recordings
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.Write("\nAggregating session data from blackjack.db");
+            Thread.Sleep(600);
+            Console.Write(".");
+            Thread.Sleep(400);
+            Console.Write(".");
+            Thread.Sleep(400);
+            Console.WriteLine(".\n");
+            Console.ResetColor();
+            Thread.Sleep(400);
+
+            using (var connection = new SQLiteConnection("Data Source=" + dbPath))
+            {
+                connection.Open();
+
+                // ── QUERY 1: CURRENT SESSION METRICS ──────────────────────────────
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("CURRENT SESSION METRICS");
+                Console.ResetColor();
+
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                        SELECT
+                            COUNT(*) AS TotalHands,
+                            ROUND(100.0 * SUM(CASE WHEN Result = 'Win' THEN 1 ELSE 0 END)
+                                / COUNT(*), 1) AS WinRate,
+                            ROUND(100.0 * SUM(CASE WHEN RecommendationFollowed = 1 THEN 1 ELSE 0 END)
+                                / NULLIF(SUM(CASE WHEN RecommendedAction != 'NONE' THEN 1 ELSE 0 END), 0), 1)
+                                AS FollowRate
+                        FROM GameSessions
+                        WHERE SessionID = @sessionID";
+                    cmd.Parameters.AddWithValue("@sessionID", sessionID);
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            int hands = reader.GetInt32(0);
+                            double winRate = reader.IsDBNull(1) ? 0 : reader.GetDouble(1);
+                            double followRate = reader.IsDBNull(2) ? 0 : reader.GetDouble(2);
+
+                            Thread.Sleep(300);
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write("  Hands played             : ");
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine(hands);
+
+                            Thread.Sleep(300);
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write("  Win rate                 : ");
+                            Console.ForegroundColor = winRate >= 50 ? ConsoleColor.Green : ConsoleColor.Red;
+                            Console.WriteLine(winRate + "%");
+
+                            Thread.Sleep(300);
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write("  Net profit               : ");
+                            Console.ForegroundColor = netProfit >= 0 ? ConsoleColor.Green : ConsoleColor.Red;
+                            Console.WriteLine((netProfit >= 0 ? "+" : "") + netProfit + " tokens");
+
+                            Thread.Sleep(300);
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write("  Recommendations followed : ");
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine(followRate + "%");
+                        }
+                    }
+                }
+
+                Thread.Sleep(300);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("  ✓ Query complete\n");
+                Console.ResetColor();
+
+                // ── QUERY 2: STRATEGY RECOMMENDATION PERFORMANCE ──────────────────
+                Thread.Sleep(500);
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("STRATEGY RECOMMENDATION PERFORMANCE");
+                Console.ResetColor();
+
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                        SELECT
+                            CASE WHEN RecommendationFollowed = 1 THEN 'Followed' ELSE 'Ignored ' END AS Compliance,
+                            COUNT(*) AS Games,
+                            ROUND(100.0 * SUM(CASE WHEN Result = 'Win' THEN 1 ELSE 0 END)
+                                / COUNT(*), 1) AS WinRate
+                        FROM GameSessions
+                        WHERE RecommendedAction != 'NONE' AND StrategyMode = 'On'
+                        GROUP BY RecommendationFollowed
+                        ORDER BY RecommendationFollowed DESC";
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            string compliance = reader.GetString(0);
+                            int games = reader.GetInt32(1);
+                            double winRate = reader.GetDouble(2);
+
+                            Thread.Sleep(400);
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write("  " + compliance + " : ");
+                            Console.ForegroundColor = compliance.Trim() == "Followed"
+                                ? ConsoleColor.Green : ConsoleColor.Red;
+                            Console.Write(winRate + "% win rate");
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.WriteLine("  (" + games + " hands)");
+                        }
+                    }
+                }
+
+                Thread.Sleep(300);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("  ✓ Query complete\n");
+                Console.ResetColor();
+
+                // ── QUERY 3: DECISION LATENCY ANALYSIS ────────────────────────────
+                Thread.Sleep(500);
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("DECISION LATENCY ANALYSIS");
+                Console.ResetColor();
+
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                        SELECT
+                            CASE
+                                WHEN HandDurationSeconds <= 5  THEN 'Fast     (0-5s) '
+                                WHEN HandDurationSeconds <= 15 THEN 'Moderate (6-15s)'
+                                ELSE                                'Slow     (15s+) '
+                            END AS Speed,
+                            COUNT(*) AS Games,
+                            ROUND(100.0 * SUM(CASE WHEN Result = 'Win' THEN 1 ELSE 0 END)
+                                / COUNT(*), 1) AS WinRate
+                        FROM GameSessions
+                        GROUP BY Speed
+                        ORDER BY WinRate DESC";
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            string speed = reader.GetString(0);
+                            int games = reader.GetInt32(1);
+                            double winRate = reader.GetDouble(2);
+
+                            Thread.Sleep(400);
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write("  " + speed + " : ");
+                            Console.ForegroundColor = winRate >= 55
+                                ? ConsoleColor.Green
+                                : winRate >= 45
+                                    ? ConsoleColor.Yellow
+                                    : ConsoleColor.Red;
+                            Console.Write(winRate + "%");
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.WriteLine("  (" + games + " hands)");
+                        }
+                    }
+                }
+
+                Thread.Sleep(300);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("  ✓ Query complete");
+                Console.ResetColor();
+
+                // ── FOOTER: TOTAL RECORDS ──────────────────────────────────────────
+                Thread.Sleep(500);
+
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                        SELECT COUNT(*) AS Records,
+                               COUNT(DISTINCT SessionID) AS Sessions,
+                               COUNT(DISTINCT PlayerID)  AS Players
+                        FROM GameSessions";
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            int records = reader.GetInt32(0);
+                            int sessions = reader.GetInt32(1);
+                            int players = reader.GetInt32(2);
+
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.WriteLine("\n══════════════════════════════════════");
+                            Console.Write("  Queried from ");
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.Write(records + " records");
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write(" across ");
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.Write(sessions + " sessions");
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write(" and ");
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.Write(players + " players");
+                            Console.WriteLine();
+                            Console.ResetColor();
+                        }
+                    }
+                }
+            }
+        }   // closes PrintQuerySummary
 
         // ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
@@ -1439,11 +1507,6 @@ namespace AlexThomasBlackJackProject2026
             // example output: "2026-05-05 14:32:01"
             string loginTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
-            // AppDomain.CurrentDomain.BaseDirectory = the folder the program is currently running from 
-            // Path.Combine() joins the folder path and filename together safely - handles the backslash between them automatically
-            // ***** CSV will always appear right next to the .exe file *****
-            string csvPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blackjack_sessions.csv");
-
             // database path - lives next to the .exe just like the CSV did
             // Phase 3: SQLite replaces CSV as the primary data store
             string dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "blackjack.db");
@@ -1459,9 +1522,9 @@ namespace AlexThomasBlackJackProject2026
             // every hand will update these counters + then they get printed at the end 
             GameStats stats = new GameStats();
 
-            // LoadPlayerBalance reads the CSV for this player's last recorded TokensAfter
-            // if no record exists = returns 100 as starting balance
-            // player.Username is the identifier - same username = same player history loaded
+            // RegisterOrLoginPlayer queries the Players table for this username
+            // returning player = loads their stored balance and longest win streak
+            // new player = inserts a fresh row and returns 100 as starting balance
 
             int currentWinStreak = 0;
 
@@ -1890,7 +1953,7 @@ namespace AlexThomasBlackJackProject2026
                     openingRecord.RiskLevel = riskLevel;
                     openingRecord.DealerWinProbability = dealerWinProbability;
 
-                    WriteRecordToCSV(openingRecord, csvPath);
+                    
                     InsertGameRecord(openingRecord, dbPath, playerID);
 
                     Console.ForegroundColor = ConsoleColor.Green;
@@ -2005,7 +2068,7 @@ namespace AlexThomasBlackJackProject2026
                     naturalRecord.RiskLevel = riskLevel;
                     naturalRecord.DealerWinProbability = dealerWinProbability;
 
-                    WriteRecordToCSV(naturalRecord, csvPath);
+                   
                     InsertGameRecord(naturalRecord, dbPath, playerID);
 
                     Console.ForegroundColor = ConsoleColor.Green;
@@ -2127,9 +2190,9 @@ namespace AlexThomasBlackJackProject2026
                             Console.WriteLine("Bet forfeited. Balance: " + tokenBalance + " tokens.");
                             Console.ResetColor();
 
-                            // write a forfeit record so the CSV stays complete
-                            // a missing row would make LoadPlayerBalance wrong next session
-                            // because it reads TokensAfter from the last row to restore balance
+                            // write a forfeit record to GameSessions so the hand is not missing from analytics — forfeits are valid behavioral data points
+                            // TokensAfter reflects the post-forfeit balance so the Players table update inside InsertGameRecord stays accurate
+
                             SessionRecord forfeitRecord = new SessionRecord();
                             forfeitRecord.SessionID = sessionID;
                             forfeitRecord.Username = player.Username;
@@ -2161,7 +2224,7 @@ namespace AlexThomasBlackJackProject2026
                             forfeitRecord.RiskLevel = riskLevel;
                             forfeitRecord.DealerWinProbability = dealerWinProbability;
 
-                            WriteRecordToCSV(forfeitRecord, csvPath);
+                            
                             InsertGameRecord(forfeitRecord, dbPath, playerID);
 
                             gameOver = true;
@@ -2546,7 +2609,7 @@ namespace AlexThomasBlackJackProject2026
                         record.RiskLevel = riskLevel;
                         record.DealerWinProbability = dealerWinProbability;
 
-                        WriteRecordToCSV(record, csvPath);
+                       
                         InsertGameRecord(record, dbPath, playerID);
 
                         Console.ForegroundColor = ConsoleColor.Green;
@@ -2582,6 +2645,7 @@ namespace AlexThomasBlackJackProject2026
             UpdatePlayerLifetimeStats(player.Username, stats.TotalGames,
                                        stats.PlayerWins, stats.StrategyModeOn, dbPath);
 
+            PrintQuerySummary(sessionID, dbPath, tokenBalance - sessionStartBalance);
             // STEP 10 = END OF SESSION
             // both loops exited - session is over
             // simple menu gives the player options rather than just printing and closing
@@ -2592,16 +2656,27 @@ namespace AlexThomasBlackJackProject2026
             Console.ResetColor();
 
             Console.ForegroundColor = ConsoleColor.Cyan;
+            Thread.Sleep(200);
             Console.WriteLine("Final token balance      : " + tokenBalance);
+            Thread.Sleep(150);
             Console.WriteLine("Strategy mode            : " + (stats.StrategyModeOn ? "On" : "Off"));
+            Thread.Sleep(150);
             Console.WriteLine("Suggestions overridden   : " + stats.SuggestionsOverridden);
+            Thread.Sleep(150);
             Console.WriteLine("Hands played             : " + stats.TotalGames);
+            Thread.Sleep(150);
             Console.WriteLine("Wins                     : " + stats.PlayerWins);
+            Thread.Sleep(150);
             Console.WriteLine("Losses                   : " + stats.DealerWins);
+            Thread.Sleep(150);
             Console.WriteLine("Ties                     : " + stats.Ties);
+            Thread.Sleep(150);
             Console.WriteLine("Player busts             : " + stats.PlayerBusts);
+            Thread.Sleep(150);
             Console.WriteLine("Dealer busts             : " + stats.DealerBusts);
-            Console.WriteLine("Longest win streak       : " + longestWinStreak); //longestWinStreak logic not added yet, but display line is ready for when it is
+            Thread.Sleep(150);
+            Console.WriteLine("Longest win streak       : " + longestWinStreak);
+            Thread.Sleep(150);
             Console.WriteLine("Data saving to           : blackjack.db\n");
             Console.ResetColor();
 
