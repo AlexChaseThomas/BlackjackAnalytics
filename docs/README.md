@@ -1,153 +1,157 @@
 # Blackjack Analytics
-### A full-stack data pipeline built in C#, SQL, Python, and Power BI
+### A behavioral data pipeline built in C#, SQLite, Python, and Power BI
 
-![Status](https://img.shields.io/badge/Status-Phase%203%20Active-green)
+![Status](https://img.shields.io/badge/Status-Phase%203%20Complete-brightgreen)
 ![C#](https://img.shields.io/badge/C%23-.NET%208-purple)
 ![SQLite](https://img.shields.io/badge/Database-SQLite-blue)
 ![Python](https://img.shields.io/badge/Python-pandas%20%7C%20matplotlib-yellow)
-![Power BI](https://img.shields.io/badge/Power%20BI-Planned-lightgrey)
+![Power BI](https://img.shields.io/badge/Power%20BI-Phase%205-lightgrey)
 
 ---
 
-## What this project is
+## What this is
 
-I love Blackjack. Not just as a game, but as a system.
+Blackjack is one of the most statistically interesting environments you can build around. Every hand forces a decision under uncertainty — there is a mathematically correct move, real money on the line, and no guarantee the right decision produces the right outcome. That tension is not unique to cards. It shows up in any business where people make decisions under pressure with incomplete information and real consequences. If you understand how people behave at a blackjack table, you understand something real about decision-making under risk. That is not a game insight. That is a business insight.
 
-Every hand is a decision under uncertainty with a mathematically correct answer. You can know the right move, make it perfectly, and still lose. That tension between sound decision-making and unpredictable outcomes is what makes Blackjack one of the most interesting statistical environments there is. If you understand how people behave at a Blackjack table, you understand something real about how people make decisions when facing risk, scarcity, and incomplete information. That is not a game insight. That is a business insight.
+This project is a full end-to-end behavioral analytics pipeline built around that environment. Think of it as an arcade machine — designed to collect structured data from every player who sits down, record every decision and outcome in real time, and feed that data into an analytics layer built to answer one core question: does access to better information actually improve decision-making, and does that show up in the results?
 
-I also love building things. I love coding, I love statistics, and I wanted a project that would let me combine all of it into something I could be proud to show. So I built a full analytics pipeline around a Blackjack game, where the game itself is the data generator and every hand produces a structured record that flows through SQL, Python, and Power BI.
-
-Nobody assigned this to me. I identified gaps in what my background could demonstrate technically, designed a project that would fill them, and built it.
-
----
-
-## Gameplay
-
-![Gameplay](/screenshots/gameplay_p3_5.18.26_image1.png)
-![Gameplay](/screenshots/gameplay_p3_5.18.26_image2.png)
+The game is the data source. SQLite is the storage layer. Python generates synthetic player data at the scale needed for statistically meaningful analysis. Power BI surfaces the insights. Each layer is independently functional — the game writes clean structured data whether or not Python has run, and the SQL queries work whether or not Power BI is connected. This is how real data pipelines are built.
 
 ---
 
 ## The pipeline
 
 ```
-C# Console App
-    ↓  generates structured session data per hand
-SQLite Database
-    ↓  stores normalized records across three tables
-Python (pandas)
-    ↓  cleans, analyzes, and visualizes the data
+C# Console Application
+    ↓  every hand writes one structured record in real time
+SQLite Database  (blackjack.db)
+    ↓  three normalized tables, 29-column behavioral schema
+Python  (pandas)
+    ↓  synthetic data generation, statistical analysis, matplotlib visualizations
 Power BI Dashboard
-    ↓  interactive business intelligence layer
-```
-
-Each layer is independently functional. The C# game writes clean data regardless of whether Python has run. The SQL queries work regardless of whether Power BI is connected. This is how real data pipelines are built.
-
----
-
-## Tech stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| Game engine | C# (.NET 8) | Data generation, OOP, business logic |
-| Database | SQLite | Persistent storage, SQL querying |
-| Analysis | Python (pandas, matplotlib) | ETL, statistical analysis, charting |
-| Visualization | Power BI | Interactive dashboard, KPI reporting |
-| Version control | Git / GitHub | Commit history, documentation |
-
----
-
-## What the data captures
-
-Every hand generates one row in the `GameSessions` table. The schema was designed analytically before a single row was written — every field answers a specific question.
-
-| Field | What it measures |
-|---|---|
-| `PlayerTotal` / `DealerTotal` | Final hand values |
-| `Result` | Win / Loss / Tie / Forfeit |
-| `PlayerBusted` / `DealerBusted` | Bust tracking |
-| `NumberOfDraws` | Drawing behavior beyond opening hand |
-| `BetAmount` | Wagering decisions |
-| `TokensBefore` / `TokensAfter` | Token flow per hand |
-| `StrategyMode` | Whether suggestions were active |
-| `OverrodeSuggestion` | Whether the player ignored a warning |
-| `DoubledDown` | Double down decision tracking |
-| `DealerVisibleCard` / `DealerVisibleValue` | Dealer upcard — enables win rate by upcard analysis |
-| `OpeningPlayerTotal` / `OpeningDealerTotal` | Two-card starting totals before any draws |
-| `PlayerHandWasSoft` | Whether player held a soft Ace at any point |
-| `HandDurationSeconds` | Decision time per hand |
-| `OSVersion` | Environment tracking |
-
-The `Players` table stores lifetime stats per username including token balance, total hands, total wins, favorite strategy mode, and longest win streak. The `Sessions` table stores one row per session for session-level analytics without requiring aggregation across `GameSessions`.
-
----
-
-## Project structure
-
-```
-BlackjackAnalytics/
-  ├── Program.cs                  C# game engine and data pipeline
-  ├── blackjack.db                SQLite database (pre-seeded)
-  ├── analysis/
-  │     ├── generate_synthetic_data.py
-  │     ├── bust_analysis.py
-  │     ├── win_rate_trends.py
-  │     ├── strategy_impact.py
-  │     └── token_flow.py
-  ├── powerbi/
-  │     ├── BlackjackDashboard.pbix
-  │     └── screenshots/
-  ├── docs/
-  │     ├── CHANGELOG.md          Full engineering decision log
-  │     ├── ROADMAP.md            Phase tracking and future plans
-  │     └── ARCHITECTURE.md      System design documentation
-  └── README.md
+    ↓  interactive visualization and KPI reporting
 ```
 
 ---
 
-## Development phases
+## Gameplay
 
-### ✅ Phase 1 — Game engine (complete)
-Built a fully functional Blackjack game with token economy, persistent balances, betting system, strategy suggestion mode, dealer AI (hard 17 rule), and soft Ace handling. Every hand writes a structured record to CSV.
+![Login and session setup](/screenshots/gameplay_p3_login.png)
 
-### ✅ Phase 2 — Code cleanup + blackjack realism (complete)
-Replaced real-name collection with a username system. Removed PII. Implemented proper casino deal order (player gets two cards, dealer gets one visible + one hole card). Added double down. Extracted `DetermineWinner()` method. Replaced if/else card value chains with a Dictionary lookup. Added opening hand strategy warnings.
+The game enforces a 21+ age gate, assigns a unique session ID, and begins writing to the database before the first card is dealt. Token balance, lifetime stats, and win streaks all persist across sessions via the Players table. The daily bonus system tracks time since last login at the database level.
 
-### 🔄 Phase 3 — SQLite integration (active)
-CSV replaced with a normalized SQLite database across three tables: `Players`, `Sessions`, and `GameSessions`. Full 25-column schema capturing hand analytics, behavioral data, and environmental context. Win streak tracking, daily bonus, and player lifetime stats all persist in the database. Python and Power BI are next.
+![Strategy tip and recommendation engine](/screenshots/gameplay_p3_strategy_tip.png)
 
-### ⬜ Phase 4 — Python analysis
-Pandas scripts analyzing bust rates, win rate trends, strategy impact, and token flow. Matplotlib charts committed to the repo.
-
-### ⬜ Phase 5 — Power BI dashboard
-Four-page interactive dashboard connecting directly to the SQLite database. Session overview, hand analysis, strategy analysis, token economy.
+Players can enable a live strategy recommendation engine. Before each decision, the engine calculates the probability the dealer beats the player's current total by simulating all possible dealer draw sequences weighted by card frequency — not by looking up a static strategy table. Every recommendation, whether followed or ignored, is recorded alongside the probability estimate that drove it.
 
 ---
 
-## Why I built this
+## Dealer reveal and hand resolution
 
-There is a version of this project that never gets built. You take a Kaggle dataset, run some queries, make a chart, call it a portfolio project. I have seen that version. I did not want to build that version.
+The dealer's hole card is hidden until the player's turn ends. Each subsequent dealer draw is revealed one card at a time with deliberate pacing.
 
-I wanted to build something where I had to think about every layer: how the data gets created, what fields matter and why, how the schema supports the questions I want to ask later, what a real SQL migration looks like, how Python connects to a database, what makes a dashboard actually useful versus just visual.
+![Dealer reveal — win](/screenshots/gameplay_p3_dealer_reveal1.png)
 
-Blackjack gave me a reason to care about all of it. The statistics are genuinely interesting to me. The behavioral patterns are genuinely interesting to me. The idea that you can quantify decision quality, track risk behavior over time, and measure whether people follow statistically sound logic when money is on the line — that is not just a game problem. It is a business problem. It is a life problem.
+![Tip firing mid-hand, dealer draw sequence, loss resolution](/screenshots/gameplay_p3_dealer_reveal2.png)
 
-I am self-taught on most of what is in this project. I identified what I needed to know, built the thing, debugged it, improved it, and documented it. That is how I work.
+---
+
+## Live database analytics
+
+At the end of every session, three SQL queries run against the live database and surface behavioral insights directly in the console.
+
+![Live database analytics output](/screenshots/gameplay_p3_analytics.png)
+
+**Current Session Metrics** queries this session's GameSessions rows for hands played, win rate, net profit, and what percentage of recommendations the player followed.
+
+**Strategy Recommendation Performance** queries lifetime data to compare win rate when following the engine versus ignoring it. Across the current dataset, players who followed recommendations won at a 41.7% rate versus 34.8% for those who ignored them.
+
+**Decision Latency Analysis** groups all hands by how long the player took to decide and shows win rate per bucket. The pattern — faster decisions correlating with better outcomes — is consistent with the hypothesis that hesitation reflects uncertainty on hands the player is likely to lose regardless.
+
+The footer shows total records, sessions, and players queried, giving immediate context for the statistical weight of the numbers above.
+
+---
+
+## The database
+
+Three normalized tables linked by integer foreign keys. The schema was designed analytically before any code was written — every field answers a specific question that could not be derived after the fact.
+
+---
+
+### GameSessions — hand-level telemetry
+
+![GameSessions table schema](/screenshots/db_schema_gamesessions.png)
+
+The primary analytics table. One row per hand, 29 columns. Fields like `HandDurationSeconds`, `RecommendedAction`, `RecommendationFollowed`, `DealerWinProbability`, and `RiskLevel` were designed specifically to support behavioral analysis that existing blackjack datasets do not capture — the relationship between information access, decision quality, and outcomes.
+
+---
+
+### Players — lifetime stats
+
+![Players table schema](/screenshots/db_schema_players.png)
+
+One row per unique username. Stores token balance, total hands, total wins, favorite strategy mode, and longest win streak. All fields accumulate across sessions using SQL-side increments to avoid race conditions.
+
+---
+
+### Sessions — session-level tracking
+
+![Sessions table schema](/screenshots/db_schema_sessions.png)
+
+One row per session. Captures start and end balance, net profit, total hands, and timestamps. Exists as a separate table so session-level queries can run without aggregating across the full GameSessions table.
+
+---
+
+## Analytical queries
+
+The compliance query is the centerpiece of the analytics layer. It answers the question the recommendation engine was built to investigate.
+
+![Compliance query in DB Browser](/screenshots/db_query_compliance.png)
+
+```sql
+SELECT
+    CASE WHEN RecommendationFollowed = 1
+         THEN 'Followed' ELSE 'Ignored' END AS Compliance,
+    COUNT(*) AS TotalGames,
+    SUM(CASE WHEN Result = 'Win' THEN 1 ELSE 0 END) AS Wins,
+    ROUND(100.0 * SUM(CASE WHEN Result = 'Win' THEN 1 ELSE 0 END)
+        / COUNT(*), 2) AS WinRatePercent
+FROM GameSessions
+WHERE StrategyMode = 'On'
+AND RecommendedAction != 'NONE'
+GROUP BY RecommendationFollowed
+ORDER BY RecommendationFollowed DESC;
+```
+
+Additional queries in the project cover win rate by dealer upcard, bust rate by opening hand total, session profitability trends, risk level accuracy against actual loss rates, and decision latency versus outcome correlation.
 
 ---
 
 ## Key engineering decisions
 
-A full log of every architectural decision, bug fix, and design choice is in [`docs/CHANGELOG.md`](/docs/CHANGELOG.md). A few highlights:
+**Hand enumeration model over static lookup** — The strategy engine calculates dealer win probability dynamically from the current game state using weighted probability tree traversal. Standard casino strategy cards are static tables derived from historical simulation — the platform looks up the answer and no calculation happens at runtime. This system performs the calculation fresh on every hand from the actual cards in play. The practical difference in a single-deck game is small. The architectural difference matters: every recommendation is grounded in real probability derived from game state, not a static rule applied regardless of context.
 
-**Privacy by design** — The game collects a date of birth for age verification (21+ restriction) but immediately discards it after calculating the player's age. Only an integer age is stored. No real names, no full birthdates, no PII in the database.
+**Analytics-first schema design** — The 29-column schema was designed before any code was written. Fields like `HandDurationSeconds` and `RecommendationFollowed` cannot be derived after the fact — they have to be captured at the moment of decision. Designing for the questions first and the schema second is the same discipline that separates useful data collection from data that accumulates without purpose.
 
-**Analytics-first schema** — The data schema was designed with SQL normalization in mind before a single row was written. Every field answers a specific analytical question. Fields that are derivable in SQL were not stored — only fields that require capture at game time are in the schema.
+**Three-table normalized design** — `Players`, `Sessions`, and `GameSessions` are linked by integer foreign keys. This supports fast aggregation at any level — player lifetime stats, session-level profitability, or individual hand analysis — without scanning the full hand table for every query.
 
-**Three-table normalized design** — `Players` (one row per username), `Sessions` (one row per session), `GameSessions` (one row per hand). Integer foreign keys link all three. This structure supports fast aggregation at any level without scanning the full hand table.
+**Sessions INSERT at start, UPDATE at end** — Each session is written to the database the moment it begins, not when it ends. This means session data exists and is queryable even for incomplete sessions, which mirrors how production session tracking systems work.
 
-**Iterative improvement** — This project was built in documented phases, with each phase committed to GitHub. The commit history shows how the system evolved from a college project into a portfolio piece. That progression is intentional — it is evidence of how I actually work.
+**Privacy by design** — The game collects a date of birth for age verification only. The full date is discarded immediately after the age is calculated. Only the integer age is written to the database. No names, no full birthdates, no PII stored anywhere in the system.
+
+---
+
+## Development phases
+
+| Phase | Status | Description |
+|---|---|---|
+| 1 — Game engine | ✅ Complete | Core game, betting system, strategy mode, CSV logging |
+| 2 — Realism + cleanup | ✅ Complete | 52-card deck, double down, proper deal order, PII removal |
+| 3 — SQLite + analytics | ✅ Complete | Three-table schema, recommendation engine, live SQL queries |
+| 4 — Python synthetic data | 🔄 Active | Simulate realistic player behavior at scale to populate the database |
+| 5 — Power BI dashboard | ⬜ Planned | Interactive dashboard over the SQLite database |
+
+Full engineering decision log: [CHANGELOG](/docs/CHANGELOG.md) · [ROADMAP](/docs/ROADMAP.md)
 
 ---
 
@@ -165,25 +169,8 @@ The game creates `blackjack.db` automatically on first run. No setup required.
 
 ---
 
-## Current analytics output (Phase 3)
-
-The game prints a session summary at the end of each session showing:
-
-- Final token balance
-- Strategy mode (On / Off)
-- Suggestions overridden
-- Hands played
-- Wins / Losses / Ties
-- Player and dealer bust counts
-- Longest win streak this session
-- Data saved to: blackjack.db
-
-SQL-powered live analytics will be added via `PrintQuerySummary()` before Phase 3 is closed.
-
----
-
 ## About
 
-Built by Alex Thomas — analytics-oriented builder with a background in operational data systems.
+Built by Alex Thomas — analytics professional with a background in operational systems and data pipeline development.
 
-[LinkedIn](https://www.linkedin.com/in/alex-chase-thomas/) • [GitHub](https://github.com/AlexChaseThomas)
+[LinkedIn](https://www.linkedin.com/in/alex-chase-thomas/) · [GitHub](https://github.com/AlexChaseThomas)
