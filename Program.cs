@@ -1565,7 +1565,6 @@ namespace AlexThomasBlackJackProject2026
                 }
                 Console.WriteLine("Thanks for playing.");
                 Console.ResetColor();
-                Console.ReadKey();
                 return;
                 // same guard clause pattern as the old password gate
                 // return inside Main() exits the entire program immediately
@@ -2716,10 +2715,7 @@ namespace AlexThomasBlackJackProject2026
                 }
             }
 
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Thanks for playing. Press any key to exit.");
-            Console.ResetColor();
-            Console.ReadKey();
+           
 
         }   // closes Main()
 
