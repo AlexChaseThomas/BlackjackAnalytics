@@ -36,6 +36,12 @@ Power BI Dashboard
     ↓  interactive visualization and KPI reporting
 ```
 
+## Dashboard Preview
+
+![Overview Page](/screenshots/dashboard_overview.png)
+
+![Token Economy](/screenshots/dashboard_token_economy.png)
+
 ---
 
 ## Gameplay
