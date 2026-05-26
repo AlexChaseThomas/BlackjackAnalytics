@@ -8,7 +8,9 @@
 ![Power BI](https://img.shields.io/badge/Power%20BI-Phase%205-lightgrey)
 
 ---
-[▶ Watch demo](/demo/blackjack_analytics_demo.mp4)
+## Demo
+
+[![Watch the demo](https://img.youtube.com/vi/IBBQVjk49mE/0.jpg)](https://youtu.be/IBBQVjk49mE)
 ---
 
 ## What this is
