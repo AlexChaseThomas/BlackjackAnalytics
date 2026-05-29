@@ -38,10 +38,17 @@ Power BI Dashboard
 
 ## Dashboard Preview
 
-![Overview Page](/screenshots/dashboard_overview.png)
+### Page 1 — Overview
+![Overview](/screenshots/dashboard_page1_overview.png)
 
-![Token Economy](/screenshots/dashboard_token_economy.png)
+### Page 2 — Token Economy
+![Token Economy](/screenshots/dashboard_page2_token_economy.png)
 
+### Page 3 — Behavioral Analytics
+![Behavioral Analytics](/screenshots/dashboard_page3_behavioral_analytics.png)
+
+### Page 4 — Player Intelligence
+![Player Intelligence](/screenshots/dashboard_page4_player_intelligence.png)
 ---
 
 ## Gameplay
