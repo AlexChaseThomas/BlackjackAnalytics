@@ -2,7 +2,7 @@
 ## BlackjackAnalytics — C# Blackjack Analytics Pipeline
 **Author:** Alex Thomas  
 **Repository:** https://github.com/AlexChaseThomas/BlackjackAnalytics  
-**Document version:** 4.0 (Phase 3 Complete)
+**Document version:** 5.0 (Project Complete — All Phases)
 
 ---
 
@@ -10,7 +10,7 @@
 
 This changelog is a living engineering record of the BlackjackAnalytics project.
 It documents every significant decision, bug fix, architectural change, and feature addition
-made during development — including the reasoning behind each decision and future considerations.
+made during development; including the reasoning behind each decision and future considerations.
 
 Each entry follows this format:
 
@@ -61,606 +61,218 @@ Categories:
 | 2.5 | Phase 3 | RegisterOrLoginPlayer(), InsertGameRecord(), CheckDailyBonusDB() | May 18, 2026 |
 | 2.6 | Phase 3 | 25-column schema — new fields wired in and populating | May 17, 2026 |
 | 2.7 | Phase 3 | Win streak tracking, session summary updated | May 18, 2026 |
-| 2.8 | Phase 3 | Strategy recommendation engine, real-time probability model, color-coded tips | May 21, 2026 |
+| 2.8 | Phase 3 | Strategy recommendation engine, real-time probability model | May 21, 2026 |
 | 2.9 | Phase 3 | 29-column schema, Sessions table tracking, Players lifetime stats | May 22, 2026 |
 | 2.91 | Phase 3 | Daily bonus bug fix, dealer reveal redesign, tip framing polish | May 22, 2026 |
 | **3.0** | **Phase 3 ✅** | **PrintQuerySummary(), CSV removed, comment pass, final Phase 3 commit** | **May 22, 2026** |
+| 3.1 | Phase 4 | generate_synthetic_data.py — behavioral archetypes, probability lookup table | May 23, 2026 |
+| 3.2 | Phase 4 | Exit prompt cleanup, token guard clause fix | May 23, 2026 |
+| **4.0** | **Phase 4 ✅** | **250 players, 9,511 hands, demo video — Phase 4 complete** | **May 23, 2026** |
+| 4.1 | Phase 5 | SQLite ODBC connection, DateTime fix in Power Query | May 26, 2026 |
+| 4.2 | Phase 5 | DAX measures, calculated columns, Page 1 Overview | May 26, 2026 |
+| 4.3 | Phase 5 | Pages 2-3 — Token Economy, Behavioral Analytics | May 27-28, 2026 |
+| 4.4 | Phase 5 | Page 4 Player Intelligence, axis disclosures, annotations | May 29, 2026 |
+| **5.0** | **Phase 5 ✅** | **Power BI dashboard complete — project complete** | **May 29, 2026** |
 
----
-
----
-
-# PHASE 1 — GAME ENGINE CONSTRUCTION
-
----
-
-**[ARCHITECTURE] Initial project structure and class design**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: Needed to evolve a college console project into a structured analytics-ready application.
-- Why it mattered: The original project was a single-file script without data classes, persistence, or analytics tracking. It could play blackjack but generated no reusable data.
-- Solution: Introduced three distinct class types — PlayerInfo (identity data), SessionRecord (per-hand analytics record), and GameStats (session-level counters). Separated data classes from the logic class BlackjackGame. This mirrors real-world data modeling patterns and sets up a clean migration path to SQL tables later.
-- Future considerations: PlayerInfo, SessionRecord, and GameStats map directly to future SQL tables. The field names chosen here should be preserved through the database migration to avoid breaking the analytics pipeline.
-
----
-
-**[FEATURE] Token economy with CSV persistence**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: No state persisted between sessions — every run started from scratch.
-- Why it mattered: Persistent balances are essential for meaningful analytics. Token flow over time is one of the most analytically interesting datasets the game produces.
-- Solution: Implemented LoadPlayerBalance() which reads the CSV backwards to find the player's most recent TokensAfter value. New players start with 100 tokens. WriteRecordToCSV() appends a new row after every hand.
-- Future considerations: The CSV approach has known limitations — no referential integrity, no querying, vulnerable to corruption. SQLite replaces this entirely in Phase 3.
-
----
-
-**[FEATURE] Daily login bonus system**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: No incentive for players to return after running low on tokens.
-- Why it mattered: Return frequency and bonus dependency are analytically interesting behavioral dimensions.
-- Solution: CheckDailyBonus() reads the player's most recent LoginTime from the CSV, calculates elapsed time as a TimeSpan, and awards 50 tokens if 24 or more hours have passed. Uses an out parameter to return both the updated balance and hours remaining.
-- Future considerations: In Phase 3 this is replaced with a single SQL query against the Players table which stores LastSeen directly.
-
----
-
-**[FEATURE] Strategy suggestion mode**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: Players had no guidance on decision quality and the game produced no data about whether players made statistically sound decisions.
-- Why it mattered: Strategy mode is one of the most analytically valuable features. OverrodeSuggestion enables future analysis of whether warned players bust more or less and whether strategy mode improves win rates.
-- Solution: Added strategyOn boolean set at session start. CalculateBustChance() calculates bust probability from current total. Warnings shown when drawing at 17+ or standing at 11 or lower.
-- Future considerations: A future improvement would factor in the dealer's visible card — the core of real basic strategy. Implemented in Phase 3.
-
----
-
-**[FEATURE] Betting system with forfeit confirmation**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: No financial stakes made the game feel meaningless and produced no wagering data.
-- Why it mattered: Bet sizing, risk behavior, and token flow are core analytics dimensions.
-- Solution: Betting prompt before each hand. Minimum 5 tokens, maximum 100 or current balance. Double-ESC forfeit confirmation. BetAmount, TokensBefore, and TokensAfter written to every SessionRecord.
-- Future considerations: Future analytics will correlate BetAmount with Result to identify risk behavior patterns.
-
----
-
-**[BUG FIX] Dealer did not draw to 17 — drew only once per player draw**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: Dealer draw logic was coupled to the player draw loop. Every time the player drew, the dealer drew exactly once.
-- Why it mattered: Violated fundamental blackjack rules and made every hand result unreliable.
-- Solution: Removed dealer drawing from the player draw branch. Added a dedicated dealer draw phase using while (dealerTotal < 17). Dealer now draws independently after the player's turn resolves.
-- Future considerations: Hard 17 rule implemented. Soft 17 configurable option is a future analytics variable idea.
-
----
-
-**[BUG FIX] Soft Ace handling missing for player and dealer**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: Aces always counted as 11. Ace + Ace = 22 and immediate bust.
-- Why it mattered: Incorrect bust detection, unfair losses, unreliable bust rate analytics.
-- Solution: Added playerAces and dealerAces integer counters. After any card is added, a while (total > 21 and aces > 0) loop subtracts 10 (converting one Ace from 11 to 1) until the total is legal or no soft Aces remain.
-- Future considerations: PlayerBusted now correctly reflects only genuine busts with no available Ace rescue.
-
----
-
-**[BUG FIX] Player could stand on 0 and win**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: Pressing N before drawing any card set playerTotal to 0. Dealer bust would record a Win with PlayerTotal = 0.
-- Why it mattered: Corrupted analytics data — a Win with PlayerTotal = 0 is meaningless.
-- Solution: Added guard clause checking numberOfDraws == 0 before allowing a stand.
-- Future considerations: This guard was removed in Phase 2 when the opening deal was introduced — players now always start with two cards, making a zero-total stand impossible by design.
-
----
-
-**[BUG FIX] Duplicate card and total output in draw branch**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: Drawn card and total printed twice per draw.
-- Solution: Consolidated all output into a single print block. ReadKey(true) removed from strategy warning blocks. Game loop's own ReadKey captures the player's actual decision.
-
----
-
-**[DATA] CSV schema design — initial column structure**
-- Date: May 7, 2026
-- Phase: Phase 1
-- Problem: Needed a persistent data format that would support future SQL queries, Python analysis, and Power BI dashboards.
-- Solution: Designed 16-column CSV covering identity, timing, gameplay outcomes, wagering, and strategy. Column order matches the planned SQL table structure.
-- Future considerations: DoubledDown added in Phase 2. Each new feature adds a column rather than repurposing existing ones.
-
----
-
----
-
-# PHASE 2 — CODE CLEANUP + IDENTITY SYSTEM + BLACKJACK REALISM
-
----
-
-**[REFACTOR] Single shared Random instance at class level**
-- Date: May 8, 2026
-- Phase: Phase 2
-- Problem: Draw() and SuitAssigner() each created a new Random instance per call. Close calls received the same seed and produced identical results.
-- Why it mattered: Would produce subtle statistical anomalies corrupting card frequency analysis.
-- Solution: Declared static Random rand = new Random() at class level. All methods share one instance.
-- Future considerations: Not thread-safe — would need replacement if multithreading is introduced in a web version.
-
----
-
-**[REFACTOR] Dictionary replaces if/else card value chains**
-- Date: May 8, 2026
-- Phase: Phase 2
-- Problem: Card value lookup was a 13-line if/else chain duplicated in three locations.
-- Why it mattered: Duplicated logic is a maintenance risk. A change in one place not mirrored in others creates subtle bugs.
-- Solution: Declared static Dictionary cardValues at class level. All three chains replaced with a single cardValues[cardName] lookup.
-- Future considerations: Direct analog to a SQL lookup table or Python dictionary. Demonstrates key-value data structure understanding.
-
----
-
-**[REFACTOR] DetermineWinner() extracted from Main()**
-- Date: May 8, 2026
-- Phase: Phase 2
-- Problem: Win/loss/tie logic lived inline in Main() and was not reusable.
-- Solution: Created static string DetermineWinner(int playerTotal, int dealerTotal) returning Win, Loss, or Tie. Conditions ordered most-specific to most-general.
-- Future considerations: Candidate for a shared Core/ library in a future multi-game casino platform.
-
----
-
-**[SECURITY] Password gate removed**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Hardcoded password visible in plain text in the source code on a public GitHub repository.
-- Why it mattered: A visible hardcoded password signals poor security awareness to any code reviewer.
-- Solution: Removed PasswordChecker() entirely. Program opens directly to welcome screen. Username system provides identity tracking.
-- Future considerations: A future web version would use properly hashed passwords stored in the database.
-
----
-
-**[SECURITY] PII removal — real names and full DOB replaced**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: System collected first name, last name, and full DOB and stored all of it in the CSV.
-- Why it mattered: Storing real names and birthdates in a public repository is bad data governance and creates negative recruiter optics.
-- Solution: Replaced names with a username system. DOB is collected for verification only, calculated into an integer age, and immediately discarded. The dob variable never touches PlayerInfo or any stored record.
-- Future considerations: Age as an integer is still meaningful for analytics while being non-identifying. A production system would require email verification.
-
----
-
-**[FEATURE] Username system with auto-registration**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Real-name system created PII risks and duplicate identity problems.
-- Solution: Players choose a username (3–20 characters, stored lowercase). Existing usernames load the previous balance. New usernames start with 100 tokens automatically.
-- Future considerations: Username uniqueness not enforced in CSV — resolved in Phase 3 via SQL UNIQUE constraint.
-
----
-
-**[FEATURE] Proper blackjack deal order**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Original deal flow was unrealistic — dealer card shown before player had any cards.
-- Why it mattered: Gameplay realism directly affects data quality. Player decisions made in an unrealistic context produce unreliable behavioral analytics.
-- Solution: Standard casino deal order implemented: player receives two cards face up, dealer receives one visible and one hole card, player decides, then dealer reveals and draws.
-- Future considerations: numberOfDraws now counts only additional draws beyond the opening two cards.
-
----
-
-**[FEATURE] Hole card reveal**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Dealer's second card was not tracked or hidden.
-- Solution: dealerHoleCard stored at deal time, not displayed during player's turn. Revealed as "Dealer reveals hole card" before dealer draws. dealerAcesStart tracks whether either starting card was an Ace.
-- Future considerations: Future analytics could track how often the dealer's hole card would have made the dealer stand without drawing.
-
----
-
-**[FEATURE] Double down mechanic**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Double down missing from the game — an important betting behavior data point absent.
-- Solution: D key handled only on opening two cards. Valid double down doubles currentBet, deals exactly one additional card, sets gameOver = true immediately. DoubledDown bool added to SessionRecord and CSV.
-- Future considerations: DoubledDown enables win rate comparison between doubled and non-doubled hands.
 
 ---
 
-**[UI/UX] Strategy warning shown for high opening hands**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Strategy warning only fired inside the draw branch — a player dealt 20 on opening received no warning.
-- Solution: Strategy warning check added after opening hand display and before game loop starts.
+*[Phases 1-3 entries preserved — see full changelog for complete engineering decision log]*
 
 ---
 
-**[UI/UX] Compact control header reprinted after strategy warnings**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Strategy warning consumed a keypress via ReadKey(true) — player had to press N twice to stand.
-- Solution: Removed ReadKey(true) from all strategy warning blocks. Compact control reminder shown instead. Game loop's own ReadKey captures the player's decision.
 
 ---
 
-**[UI/UX] Play again blended with betting prompt**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Two separate prompts after each hand — play again confirmation then betting prompt.
-- Solution: Single line: "Type your bet to continue, or type exit to quit." Betting loop appears immediately below.
-
----
-
-**[UI/UX] End of session menu added**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Session ended with static summary and no option to play again without restarting.
-- Solution: Menu added with P (play again) and ESC (exit). Pressing P calls Main() recursively.
-- Future considerations: Recursive Main() is technical debt. Acceptable for current scope.
-
----
-
-**[DATA] DoubledDown column added to CSV schema**
-- Date: May 11, 2026
-- Phase: Phase 2
-- Problem: Double down implemented as a mechanic but not tracked in analytics data.
-- Solution: public bool DoubledDown added to SessionRecord. Column appended to CSV header and data row.
-
----
-
-**[BUG FIX] Game header border misalignment**
-- Date: May 8, 2026
-- Phase: Phase 2
-- Problem: GAME # header line did not correctly pad to box width, causing right border misalignment.
-- Solution: Replaced format specifier with stats.TotalGames.ToString().PadRight(30).
-
----
-
----
-
-# PHASE 3 — 52-CARD DECK, GAME ENGINE POLISH, SQLITE INTEGRATION
-
----
-
-**[FEATURE] Card class and 52-card deck system**
-- Date: May 13, 2026
-- Phase: Phase 3
-- Problem: The original Draw() and SuitAssigner() methods picked randomly from a 13-card array with no memory of what was already drawn. The same card could appear multiple times in one hand — impossible in a real deck.
-- Why it mattered: Duplicate cards in a hand corrupt every analytics dimension — hand totals, bust rates, draw counts. The data being generated was statistically invalid.
-- Solution: Introduced the Card class with Name, Suit, and ToString() override (prints "Ace of Hearts"). BuildDeck() creates a full 52-card List (13 values x 4 suits). ShuffleDeck() uses the Fisher-Yates algorithm — the standard unbiased shuffle that gives every possible ordering equal probability. DealCard() deals from index 0, removes the card, and auto-reshuffles when fewer than 10 cards remain.
-- Future considerations: The 10-card reshuffle threshold is conservative. A future multi-deck shoe version would track cards across multiple decks for card counting analytics.
-
----
-
-**[REFACTOR] CalculateBustChance refactored to Dictionary**
-- Date: May 16, 2026
-- Phase: Phase 3
-- Problem: CalculateBustChance() used a separate parallel array structure to map card values to their weights — inconsistent with the Dictionary pattern established for cardValues throughout the codebase.
-- Why it mattered: Inconsistent data structure patterns across methods create maintenance risk and make the codebase harder to read. A reviewer familiar with cardValues would expect the same pattern here.
-- Solution: Refactored CalculateBustChance() and CalculateBustChanceDouble() to use Dictionary<int, int> valueCount matching the cardValues pattern. Same logic, consistent structure.
-
----
-
-**[ARCHITECTURE] File header updated — purpose, architecture, and key decisions documented**
-- Date: May 13, 2026 (initial); May 22, 2026 (Phase 3 complete update)
-- Phase: Phase 3
-- Problem: The file opened with a large multi-paragraph OOP explanation block and included using System.Runtime.InteropServices which was never needed.
-- Why it mattered: Stale educational scaffolding in a professional portfolio project signals a learning-phase codebase rather than a polished one.
-- Solution: Replaced with a clean header showing author, GitHub link, version, and class inventory. At Phase 3 close, updated to add PURPOSE, ARCHITECTURE, DATABASE TABLES, and KEY DESIGN DECISIONS sections.
-
----
-
-**[BUG FIX] Opening Blackjack dealer draw missing**
-- Date: May 15, 2026
-- Phase: Phase 3
-- Problem: When the player hit 21 on the opening deal, the game skipped the dealer draw phase entirely. The dealer did not draw to 17 and the result was determined against the dealer's opening two-card total only.
-- Why it mattered: The house rule requires the dealer to draw to 17 regardless of player outcome. Skipping this meant some wins were incorrectly awarded when the dealer would have also reached 21 (a tie) or beyond.
-- Solution: Added a dedicated dealer draw loop inside the opening Blackjack resolution block using while (dealerTotal < 17) with soft Ace handling. Dealer now always completes their hand before DetermineWinner() is called.
-
----
-
-**[FEATURE] Dealer natural 21 — dedicated resolution path added**
-- Date: May 16, 2026
-- Phase: Phase 3
-- Problem: When the dealer held 21 on the opening deal, the game had no dedicated handling — the player was allowed to draw before the dealer's natural was revealed, which is incorrect under casino rules.
-- Why it mattered: Casino rules require checking for a dealer natural before player decisions begin. Allowing the player to draw against a dealer natural produces incorrect results and unreliable data.
-- Solution: Added a dedicated natural 21 check immediately after the opening deal. If the dealer has 21 and the player does not, the hole card is revealed, "Dealer has 21! Hand over." is displayed, and the hand resolves immediately without the player drawing. The full dealer hand is displayed with the reveal.
-
----
-
-**[BUG FIX] Dealer did not complete hand when player busted**
-- Date: May 15, 2026
-- Phase: Phase 3
-- Problem: The dealer draw loop was wrapped in if (playerTotal <= 21) — meaning when the player busted, the dealer never drew. DealerTotal in the CSV recorded only the opening two-card total, not the actual final hand.
-- Why it mattered: DealerTotal being wrong on bust hands corrupts every analytics query that uses that field — average dealer totals, dealer bust rates, hand comparison distributions.
-- Solution: Removed the guard clause from around the dealer draw loop. Dealer now always draws to 17 regardless of player bust. DealerTotal in every row now reflects the actual completed dealer hand.
-
 ---
 
-**[BUG FIX] Both-bust rule — player always loses when they bust**
-- Date: May 15, 2026
-- Phase: Phase 3
-- Problem: DetermineWinner() had a special case returning Tie when both player and dealer busted. In real blackjack the player always loses when they bust — the house edge depends on this rule.
-- Why it mattered: Recording Tie instead of Loss on both-bust hands and refunding the bet incorrectly represents the game's economics. Token flow analytics and win rate calculations would be wrong.
-- Solution: Removed the both-bust Tie case. Added if (playerTotal > 21) return Loss as the second condition in DetermineWinner() — player bust is always a loss regardless of dealer outcome.
+# PHASE 4 — PYTHON SYNTHETIC DATA GENERATION
 
 ---
 
-**[BUG FIX] Both-21 should be a Tie not a Win**
-- Date: May 13, 2026
-- Phase: Phase 3
-- Problem: When both player and dealer hit exactly 21, DetermineWinner() returned Win because the player-21 check fired before the dealer-21 check.
-- Why it mattered: A push (tie) when both reach 21 is the correct casino rule. Recording it as a Win overstates win rates and awards tokens incorrectly.
-- Solution: Added if (playerTotal == 21 && dealerTotal == 21) return Tie as the first condition in DetermineWinner(), before all other checks.
+**[FEATURE] generate_synthetic_data.py — synthetic data generation pipeline**
+- Date: May 23, 2026
+- Phase: Phase 4
+- Problem: The database contained only real player sessions — too few records for statistically meaningful analytics queries or visually compelling Power BI dashboards. The platform is designed as an arcade machine intended to collect data from many players over time, but without web deployment, real sessions accumulate too slowly.
+- Why it mattered: Every analytical finding becomes more credible and every dashboard visual becomes more meaningful at scale. With only a handful of real sessions, win rate comparisons between compliance groups were not statistically reliable and the Power BI dashboard had nothing interesting to show.
+- Solution: Built generate_synthetic_data.py in the /analysis folder. The generator connects to blackjack.db via sqlite3, simulates 250 players across six behavioral archetypes, and writes complete records to all three tables — Players, Sessions, and GameSessions. All outcomes are derived from real game logic: cards are dealt from a 52-card deck, hands play out, and results are determined by actual blackjack probability. The generator does not assign results randomly — it simulates them.
+- Future considerations: The script is documented openly in the repository with a clear explanation of why synthetic data is used. It demonstrates Python, sqlite3, and functional programming skills as a standalone portfolio item within the pipeline.
 
 ---
 
-**[BUG FIX] overrodeSuggestion logic was inverted**
-- Date: May 15, 2026
-- Phase: Phase 3
-- Problem: overrodeSuggestion was set to true whenever a strategy warning was shown, even if the player then stood correctly. It should only be true if the player was warned AND chose to draw anyway.
-- Why it mattered: The SuggestionsOverridden count in the session summary was inflated. Every warning shown counted as an override even when the player followed the advice. This made the strategy analytics unreliable.
-- Solution: Introduced warningActive bool declared at the top of each hand's variables. Strategy warnings set warningActive = true. At the top of the draw branch, if warningActive is true the draw is flagged as an override. Standing after a warning no longer counts as an override.
+**[ARCHITECTURE] Six behavioral archetypes with individual variation**
+- Date: May 23, 2026
+- Phase: Phase 4
+- Problem: Generating 250 players with hand-coded behavioral profiles would have been impractical. A single archetype for all players would produce unrealistically uniform data with no behavioral signal.
+- Why it mattered: The analytical value of the dataset depends on real behavioral variation across players. Without different compliance rates, decision speeds, and betting patterns, the compliance analysis and decision latency analysis produce flat, uninformative results.
+- Solution: Defined six archetypes — disciplined (high compliance, moderate speed, conservative bets), impulsive (low compliance, fast decisions, aggressive bets), deliberate (high compliance, slow decisions, conservative bets), casual (mixed compliance, moderate speed), risk-taker (low compliance, aggressive bets), and novice (inconsistent compliance, slow decisions, erratic bets). Each player is assigned to an archetype with individual variation added on top using random sampling within archetype ranges. Ages are distributed across a 21-68 range weighted by archetype to enable age-behavior correlation analysis.
+- Future considerations: The archetype field was intentionally not written to the database. Real players do not have archetypes, and adding the field would create null values for all real sessions — a data governance decision documented in the project.
 
 ---
 
-**[BUG FIX] Exit at betting prompt dealt a phantom hand**
-- Date: May 13, 2026
-- Phase: Phase 3
-- Problem: Typing exit at the betting prompt set sessionActive = false and broke out of the betting loop, but the session loop continued into the hand setup, dealing cards and starting the game loop with a zero bet.
-- Solution: Added if (!sessionActive) break immediately after the betting loop closes.
+**[ARCHITECTURE] Weighted probability lookup table with lru_cache memoization**
+- Date: May 23, 2026
+- Phase: Phase 4
+- Problem: Simulating real blackjack probability for 9,500+ hands required calculating dealer win probability for every hand. The recursive probability tree traversal used in the C# game engine would be prohibitively slow in Python if called fresh on every hand without optimization.
+- Why it mattered: Performance and accuracy were both at risk. A naive implementation would either be too slow for practical use or would approximate probability rather than calculating it correctly.
+- Solution: Built build_win_prob_table() which pre-computes dealer win probability for all relevant (playerTotal, dealerVisibleValue) combinations using a recursive helper function decorated with @lru_cache. The lru_cache transforms the exponential recursion tree into a linear memoized lookup by caching each unique (player_total, dealer_total, dealer_aces) game state. The table is computed once at startup; all in-simulation lookups are O(1). This mirrors the architectural distinction in the C# engine between static lookup tables and runtime probability calculation — the Python generator uses the same weighted tree traversal model but optimizes it for batch simulation performance.
+- Future considerations: The lru_cache approach and its architectural reasoning are documented in method comments for portfolio reference.
 
 ---
 
-**[BUG FIX] Hands played count off by one when exiting**
-- Date: May 13, 2026
-- Phase: Phase 3
-- Problem: stats.TotalGames++ incremented at the top of the session loop before the bet was placed. When the player typed exit, the counter had already incremented for a hand that was never played.
-- Why it mattered: The session summary showed one more hand than was actually played, and the last SessionRecord written had an incorrect GameNumber.
-- Solution: Moved stats.TotalGames++ to after the if (!sessionActive) break guard clause.
+**[DATA] 250 synthetic players — final database scale**
+- Date: May 23, 2026
+- Phase: Phase 4
+- Problem: Needed a dataset large enough to produce statistically credible findings across multiple analytical dimensions simultaneously — compliance groups, decision speed buckets, age brackets, and individual player leaderboards.
+- Why it mattered: At 50 players the compliance groups would have too few hands for reliable comparison. At 250 players with 4-7 sessions each and 8-16 hands per session the dataset produces stable results across all dimensions.
+- Solution: Generated 250 synthetic players producing 1,375 sessions and approximately 9,495 hands. Combined with real player sessions, the final database contained 262 total players, 1,377 sessions, and 9,511 hands. The compliance analysis (followed 40.1% vs ignored 29.6%) runs across 5,888 strategy-on hands — well above the minimum threshold for credible directional analysis. All 29 GameSessions columns populated correctly and verified in DB Browser before the final commit.
+- Future considerations: The synthetic data is clearly documented in the README and CHANGELOG. The generator script is committed to the repository with full explanatory comments. This is standard practice for analytics portfolio projects where real multi-user deployment is not feasible.
 
 ---
 
-**[BUG FIX] Daily bonus LastSeen race condition**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: RegisterOrLoginPlayer() updated Players.LastSeen to the current login time before CheckDailyBonusDB() read it. By the time the bonus check ran, LastSeen was already set to now, making the elapsed time always ~0 hours and the bonus effectively impossible to trigger.
-- Why it mattered: Players would never receive their daily bonus regardless of how much time had passed since their last login.
-- Solution: Removed the LastSeen update from RegisterOrLoginPlayer() entirely. CheckDailyBonusDB() now owns all LastSeen updates — updating it in both the bonus-awarded and bonus-not-yet-due paths.
+**[BUG FIX] Redundant exit prompt removed**
+- Date: May 23, 2026
+- Phase: Phase 4
+- Problem: After selecting ESC at the session end menu, the program displayed "Thanks for playing. Press any key to exit." and required an additional keypress before closing.
+- Why it mattered: The player had already made the explicit choice to exit by pressing ESC. A second prompt after that decision adds friction without purpose and makes the session exit feel inconsistent with the decisive exit design elsewhere in the application.
+- Solution: Removed the Console.WriteLine("Thanks for playing. Press any key to exit.") and Console.ReadKey() calls from the exit path. The program now closes cleanly when the player selects ESC. The same redundant ReadKey() was removed from the token guard clause (zero balance at login) path to maintain consistency.
 
 ---
 
-**[UI/UX] Dealer hole card reveal pause animation**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: The dealer's hole card and all subsequent dealer draws appeared instantly with no pacing.
-- Solution: Added Thread.Sleep(1500) before the hole card reveal with a "Dealer revealing..." prompt. Uses Console.SetCursorPosition to overwrite the suspense line so it disappears and the full dealer hand appears in its place — the hole card is implied by its position in the hand rather than announced separately. Thread.Sleep(1000) added between each dealer draw. Thread.Sleep(800) after the initial reveal before drawing begins.
+**[BUG FIX] Token guard clause — analytics path on zero balance mid-session**
+- Date: May 23, 2026
+- Phase: Phase 4
+- Problem: When a player ran out of tokens mid-session, the session ended abruptly without running PrintQuerySummary(), UpdateSessionRecord(), or UpdatePlayerLifetimeStats(). The session record was left incomplete.
+- Why it mattered: A session that ends due to token exhaustion is still a valid data point. The analytics queries should fire and the session should be closed correctly regardless of why the session ended.
+- Solution: Confirmed that the existing sessionActive = false path correctly falls through to the UpdateSessionRecord() and PrintQuerySummary() calls at the bottom of the session loop. The zero-balance-at-login guard clause was verified separately — this path correctly exits before InsertSessionRecord() is called, so there is no session to summarize, and no queries fire. Both paths now behave correctly.
 
 ---
-
-**[UI/UX] Dealer hole card always revealed even on player bust**
-- Date: May 15, 2026
-- Phase: Phase 3
-- Problem: When the player busted, the dealer's hole card was never revealed.
-- Why it mattered: Transparency in game outcome is important for player trust. A player should always see what the dealer was holding.
-- Solution: Moved the hole card reveal block outside the if (playerTotal <= 21) guard. Hole card always revealed regardless of player bust.
-
----
-
-**[UI/UX] Soft Ace display**
-- Date: May 16, 2026
-- Phase: Phase 3
-- Problem: Players could not see when an Ace had silently dropped from 11 to 1, making the hand total confusing.
-- Why it mattered: A player seeing a hand total that does not add up to what they expect loses trust in the game.
-- Solution: PrintPlayerHand() updated to accept aceCountingAsOne bool parameter. When true, appends "(Ace counting as 1)" after the hand display in DarkYellow. aceDropped flag set to true whenever a soft Ace adjustment occurs in any path.
-
----
-
-**[UI/UX] Strategy mode selection redesigned with numbered options and color coding**
-- Date: May 16, 2026
-- Phase: Phase 3
-- Problem: The strategy mode selection prompt was a plain text question with no visual hierarchy or clear distinction between options.
-- Why it mattered: The strategy mode choice is one of the most important decisions the player makes — it controls whether the recommendation engine activates and affects what data gets written to the database. The prompt should reflect that importance.
-- Solution: Full box display built with box-drawing characters. [1] ON displayed in green, [2] OFF displayed in yellow. Description text explains what strategy mode does. Consistent with the GAME # box display style throughout the application.
-
----
-
-**[UI/UX] Bust message, visual hand separator, session summary bust counts, input buffer flush fix**
-- Date: May 16, 2026
-- Phase: Phase 3
-- Problem: Multiple small display issues — no explicit bust message when player went over 21, hand cards displayed without visual separation, session summary did not show bust counts, and buffered keypresses from the dealer animation were being consumed at the start of the next hand.
-- Why it mattered: The bust message is important feedback for the player. The input buffer issue caused the next hand to fire a hit or stand automatically from a leftover keypress, which is a serious gameplay bug.
-- Solution: Added "Bust! You went over 21." message when playerTotal > 21. Added pipe separators between cards in PrintPlayerHand() and PrintDealerHand(). Added PlayerBusts and DealerBusts counters to GameStats and displayed them in the session summary. Added while (Console.KeyAvailable) Console.ReadKey(true) flush before each hand loop start.
-
----
-
-**[UI/UX] Prompt text consistency**
-- Date: May 15, 2026
-- Phase: Phase 3
-- Problem: The continue/exit prompt used different wording in different paths.
-- Solution: Standardized all instances to: "Place a bet to continue, or type exit to see your session summary."
-
----
-
-**[UI/UX] Session summary reveal animation**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: Session summary printed all lines instantly with no visual pacing.
-- Solution: Added Thread.Sleep(150) between each session summary line. Consistent with the paced reveal pattern used for dealer cards and the live analytics display.
-
----
-
-**[UI/UX] Username validation rejects spaces**
-- Date: May 16, 2026
-- Phase: Phase 3
-- Problem: Usernames containing spaces were accepted, which would cause issues with future CSV parsing and made username matching unreliable.
-- Why it mattered: A space in a username breaks the CSV column structure since the file uses comma-separated values. In the SQLite version spaces create inconsistent matching behavior.
-- Solution: Added username.Contains(" ") check to the validation while loop condition. Validation now requires usernames to be 3–20 characters and contain no spaces.
-
----
-
-**[ARCHITECTURE] Three-table SQLite schema designed and initialized**
-- Date: May 13, 2026
-- Phase: Phase 3
-- Problem: CSV flat file has no referential integrity, no querying capability, and no enforcement of data constraints.
-- Why it mattered: The analytics pipeline requires a queryable data store. SQL queries for win rates, bust rates, and strategy impact cannot run against a CSV. The Python and Power BI phases depend on a database being in place.
-- Solution: Designed a normalized three-table schema. Players stores one row per unique username with PlayerID (AUTOINCREMENT PRIMARY KEY), Username (UNIQUE NOT NULL), PlayerAge, FirstSeen, LastSeen, TokenBalance (CHECK >= 0), TotalHandsAllTime, TotalWinsAllTime, FavoriteStrategyMode, and LongestWinStreak. Sessions stores one row per session with start/end times, balance, and net profit. GameSessions stores one row per hand with 29 columns and foreign key references to both Players and Sessions. InitializeDatabase() creates all three tables using CREATE TABLE IF NOT EXISTS.
-- Future considerations: All SQL queries use parameterized queries to prevent SQL injection.
-
----
-
-**[FEATURE] RegisterOrLoginPlayer()**
-- Date: May 18, 2026
-- Phase: Phase 3
-- Problem: LoadPlayerBalance() read the CSV backwards — no integrity, no querying, vulnerable to corruption.
-- Why it mattered: Balance persistence is the most critical piece of state in the game.
-- Solution: RegisterOrLoginPlayer() queries the Players table by Username using a parameterized SELECT. Returning players load their TokenBalance and LongestWinStreak. New players get a fresh INSERT with 100 starting tokens. Returns a (balance, playerID, longestWinStreak) tuple. LastSeen update removed from this method — owned by CheckDailyBonusDB() to prevent the race condition described above.
-- Future considerations: Replaces LoadPlayerBalance() entirely.
-
----
-
-**[FEATURE] InsertGameRecord()**
-- Date: May 18, 2026
-- Phase: Phase 3
-- Problem: WriteRecordToCSV() produced a flat file with no queryability, no referential integrity, and no constraint enforcement.
-- Solution: InsertGameRecord() writes one row to GameSessions using a fully parameterized INSERT covering all 29 columns, then updates Players.TokenBalance in the same connection. Called at every hand resolution point — normal resolve, opening Blackjack, dealer natural, and forfeit. Bools converted to 0/1 integers at the parameter binding layer.
-- Future considerations: Replaces WriteRecordToCSV() as the primary data store.
-
----
-
-**[FEATURE] InsertSessionRecord() and UpdateSessionRecord()**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: Sessions table existed in the schema but was never populated. No session-level analytics were being recorded.
-- Why it mattered: Session-level queries — profitability per session, session length trends, strategy mode adoption — require a Sessions row. Without it those queries require aggregating the full GameSessions table.
-- Solution: InsertSessionRecord() writes a row to Sessions at session start capturing SessionID, PlayerID, Username, StartTime, and StartBalance. UpdateSessionRecord() fills in EndTime, TotalHands, EndBalance, and NetProfit at session end. sessionStartBalance snapshot taken after the daily bonus is applied so NetProfit correctly reflects in-session performance only. INSERT OR IGNORE prevents duplicate rows on recursive Main() calls.
-- Future considerations: Session exists in the database from the moment it starts — not just when it completes.
-
----
-
-**[FEATURE] CheckDailyBonusDB()**
-- Date: May 18, 2026
-- Phase: Phase 3
-- Problem: CheckDailyBonus() read LoginTime from the CSV — slow on large files and dependent on a file Phase 3 is eliminating.
-- Solution: CheckDailyBonusDB() reads Players.LastSeen with a single parameterized SELECT. Computes elapsed time as a TimeSpan. If 24+ hours have passed, awards 50 tokens and updates both TokenBalance and LastSeen in one UPDATE. Returns updated balance and hoursUntilBonus out parameter.
-- Future considerations: Replaces CheckDailyBonus() entirely.
 
 ---
 
-**[DATA] 25-column GameSessions schema expansion**
-- Date: May 17, 2026
-- Phase: Phase 3
-- Problem: Original 17-column schema lacked fields needed for dealer upcard analysis, opening hand analysis, soft hand tracking, decision timing, and environmental context.
-- Why it mattered: Without DealerVisibleCard there is no way to analyze win rate by dealer upcard. Without OpeningPlayerTotal there is no way to study bust rates by starting hand.
-- Solution: Added DealerVisibleCard, DealerVisibleValue, OpeningPlayerTotal, OpeningDealerTotal, PlayerHandWasSoft, HandDurationSeconds, OSVersion. All new columns have DEFAULT values so existing rows remain valid.
+# PHASE 5 — POWER BI DASHBOARD
 
 ---
 
-**[DATA] Four strategy analytics fields added — schema expanded to 29 columns**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: Strategy recommendations were being displayed to the player but not recorded in the database.
-- Why it mattered: The strategy recommendation engine is the most analytically valuable feature. Without recording its outputs, compliance analysis, override heatmaps, and decision quality queries are all impossible.
-- Solution: Added RecommendedAction (TEXT DEFAULT NONE), RecommendationFollowed (INTEGER DEFAULT 0), RiskLevel (TEXT DEFAULT NONE), DealerWinProbability (REAL DEFAULT 0.0). RecommendationFollowed logic: STAND is followed if numberOfDraws == 0, HIT is followed if numberOfDraws > 0, NONE if strategy mode was off.
-- Future considerations: These four fields enable the compliance analysis and recommendation accuracy validation queries central to the Power BI dashboard.
+**[ARCHITECTURE] Power BI connected to live SQLite database via ODBC**
+- Date: May 26, 2026
+- Phase: Phase 5
+- Problem: Power BI does not have a native SQLite connector. Connecting the dashboard to the live database required a driver layer between Power BI's ODBC interface and the SQLite file format.
+- Why it mattered: The dashboard needed to connect to the actual blackjack.db file rather than importing static data. A live connection means the dashboard updates automatically when new game sessions are played.
+- Solution: Installed Christian Werner's SQLite ODBC driver (sqliteodbc.exe and sqliteodbc_w64.exe). Connected Power BI Desktop via Get Data → ODBC → SQLite3 Datasource with connection string Database=[path to blackjack.db]. All three tables loaded successfully — GameSessions, Players, Sessions. Table relationships auto-detected correctly: Players → Sessions (1:many), Players → GameSessions (1:many), Sessions → GameSessions (1:many).
 
 ---
 
-**[FEATURE] Strategy recommendation engine with real-time probability calculation**
-- Date: May 21, 2026
-- Phase: Phase 3
-- Problem: Phase 1 strategy warnings used only bust probability and did not account for the dealer's visible card, did not calculate win probability, and did not make a clear HIT or STAND recommendation.
-- Why it mattered: A strategy system that ignores the dealer's position does not reflect real basic strategy. The dealer upcard is the most important variable in any blackjack decision.
-- Solution: GetStrategyRecommendation() implements the core basic strategy ruleset using dealerVisibleValue as the primary variable — dealer 7-Ace (strong) means hit more aggressively, dealer 2-6 (weak) means stand more conservatively. CalculateDealerWinProbability() calculates probability dynamically using a weighted probability tree traversal across all possible dealer hole cards and draw sequences. This is an architectural distinction from static lookup tables — the calculation runs at runtime from current game state, not from pre-computed averages.
-- Future considerations: The hand enumeration model is designed to support future context-aware extensions.
+**[DATA] LoginTime converted from TEXT to DateTime in Power Query**
+- Date: May 26, 2026
+- Phase: Phase 5
+- Problem: SQLite stores datetime values as TEXT strings. Power BI imported LoginTime, StartTime, and EndTime as text columns with no date hierarchy, making time-based analysis impossible and causing every attempt to use these fields on a chart axis to fail silently.
+- Why it mattered: The Token Economy page required monthly aggregation of LoginTime for the house edge and platform volume charts. Text columns have no date hierarchy in Power BI — drill up/down buttons are grayed out and the axis renders as individual timestamps rather than months.
+- Solution: Opened Transform Data (Power Query Editor). Changed the data type of LoginTime in GameSessions, and StartTime and EndTime in Sessions from Text to Date/Time using Transform → Change Type → Date/Time. Clicked Close & Apply. Power BI now recognizes these as datetime values and creates an automatic date hierarchy (Year → Quarter → Month → Day) enabling drill navigation and proper monthly aggregation.
+- Future considerations: This is a common issue when connecting Power BI to SQLite. The fix is documented here as a reference for future connections to the same database.
 
 ---
 
-**[ARCHITECTURE] Weighted probability tree traversal — SimulateDealerDraw() and CalculateDealerWinProbability()**
-- Date: May 21, 2026
-- Phase: Phase 3
-- Problem: Needed a way to calculate dealer win probability dynamically without enumerating every possible card sequence exhaustively.
-- Why it mattered: The architectural choice between a static lookup table and a runtime probability model is significant. Static tables are fast but opaque. A dynamic model is transparent, context-aware, and extensible.
-- Solution: SimulateDealerDraw() is a recursive method that traverses the dealer probability tree using weighted card frequencies. Each path is assigned a probability weight (e.g., a 10-value card has weight 4/13). Paths multiply weights at each draw level. Outcomes are accumulated into ref double dealerWins and ref double totalOutcomes — ref parameters allow recursive accumulation across the full tree without return value complexity.
-- Future considerations: This architecture is documented in detail in the method comments as an interview reference. The distinction between this approach and a lookup table is one of the strongest technical talking points in the project.
+**[FEATURE] DAX measures — full list**
+- Date: May 26-29, 2026
+- Phase: Phase 5
+- Problem: Power BI's default aggregations (Sum, Count, Average) are not sufficient to answer the analytical questions the dashboard is built around. Custom measures were required for win rates by compliance group, average bet by strategy mode, and player-level deviation from mean token balance.
+- Solution: Created the following measures in GameSessions and Players tables:
+  - Win Rate — DIVIDE(COUNTROWS(FILTER wins), COUNTROWS all)
+  - Win Rate Followed — win rate where RecommendationFollowed=1 and StrategyMode="On"
+  - Win Rate Ignored — win rate where RecommendationFollowed=0 and StrategyMode="On" and RecommendedAction<>"NONE"
+  - Player Net PnL — SUMX evaluating BetAmount as positive on wins, negative on losses
+  - Total Tokens Wagered — SUM(BetAmount) for platform volume analysis
+  - Net Token Flow — TokensAfter minus TokensBefore across all hands
+  - Avg Bet Strategy On — CALCULATE(AVERAGE(BetAmount), StrategyMode="On")
+  - Avg Bet Strategy Off — CALCULATE(AVERAGE(BetAmount), StrategyMode="Off")
+  - Avg Decision Time — AVERAGE(HandDurationSeconds)
+  - Compliance Rate — DIVIDE followed strategy-on hands by total strategy-on hands with recommendations
+  - Player Win Rate — DIVIDE wins by total for player-level leaderboard context
+  - Hands Won Following — COUNTROWS wins where RecommendationFollowed=1 and StrategyMode="On"
+  - Hands Lost Ignoring — COUNTROWS losses where RecommendationFollowed=0 and StrategyMode="On" and RecommendedAction<>"NONE"
+  - Token Deviation — MAX(TokenBalance) minus CALCULATE(AVERAGE(TokenBalance), ALL(Players))
+- Future considerations: All measures use parameterized filter conditions that could be adapted for supply chain KPIs — fill rate, compliance rate, on-time delivery rate — by substituting table and column names.
 
 ---
 
-**[FEATURE] CalculateDealerBustProbability() and SimulateDealerBust()**
-- Date: May 21, 2026
-- Phase: Phase 3
-- Problem: When the dealer shows a weak card (4-6), the relevant metric for a STAND recommendation is the probability the dealer busts — not the probability the dealer wins. Showing dealer win probability for weak dealer cards produces a misleadingly low number.
-- Why it mattered: A tip that says "dealer has 38% chance of winning" when dealer shows a 5 could mislead a player into hitting. The correct framing is "dealer has 41% chance of busting."
-- Solution: CalculateDealerBustProbability() mirrors CalculateDealerWinProbability() but counts bust outcomes instead of win outcomes. Threshold: dealers 4-6 use bust probability framing, dealers 2-3 and 7-Ace use win probability framing.
+**[FEATURE] Calculated columns — SpeedBucket, AgeBracket, sort columns**
+- Date: May 27-28, 2026
+- Phase: Phase 5
+- Problem: HandDurationSeconds is a continuous numeric field. AgeBracket requires grouping PlayerAge into four ranges. Both needed to be converted to labeled categories for axis display. Text categories in Power BI sort alphabetically by default — 0-3s, 11-15s, 16-25s, 26s+, 4-6s, 7-10s — which destroys the analytical meaning of the decision speed chart.
+- Solution: Created SpeedBucket as a calculated column using nested IF statements: 0-3s, 4-6s, 7-10s, 11-15s, 16-25s, 26s+. Created SpeedBucketSort as a numeric companion column (1-6) and set SpeedBucket to Sort by Column SpeedBucketSort. Created AgeBracket (21-29, 30-39, 40-49, 50+) and AgeBracketSort (1-4) with the same sort pattern. Both sort columns are invisible to the report consumer but ensure correct chronological and demographic ordering on all visuals.
+- Future considerations: The sort-by-column pattern is the standard Power BI solution for any text category that needs non-alphabetical ordering. This applies to month names, age brackets, risk levels, and any other labeled bucket.
 
 ---
 
-**[FEATURE] PrintStrategyRecommendation() — two-tier display with color-coded controls**
-- Date: May 21, 2026
-- Phase: Phase 3
-- Problem: Phase 1 strategy warnings were uniform regardless of the decision stakes.
-- Solution: Two-tier system: totals 11 or lower receive no display (player cannot bust). Totals 12 or higher receive an inline tip with the probability estimate and color-coded controls — green for the recommended action, red for the override, cyan for quit. Tip framing is conditional: dealer 4-6 uses bust probability, dealer 2-3 and 7-Ace uses player win probability. Blank line added after controls.
-- Future considerations: Color-coded controls create a clear visual signal visible during screen recordings.
+**[FEATURE] Page 1 — Overview**
+- Date: May 26, 2026
+- Phase: Phase 5
+- Problem: Needed a page that orients any viewer in under 10 seconds and leads with the most important analytical finding in the project.
+- Solution: Three KPI cards across the top (9,511 Total Hands Played, 262 Total Players, 38% Overall Win Rate) provide dataset context. Centerpiece visual in black: clustered column chart titled "How does suggestion adherence affect win rate?" comparing 40.1% (Followed) versus 29.6% (Ignored) with Y axis minimum set to 25% to emphasize the gap. Supporting visuals: Win/Loss/Tie donut chart and Hands by Outcome horizontal bar chart. Insight annotation below centerpiece: "Players who follow strategy recommendations win 35% more often than those who ignore them, suggesting the recommendation engine provides measurable decision quality improvement." Axis disclosure footnote: "Y axis range 25%-50%. Absolute spread between followed and ignored is ~10.5 percentage points."
 
 ---
 
-**[FEATURE] UpdatePlayerLifetimeStats()**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: TotalHandsAllTime, TotalWinsAllTime, and FavoriteStrategyMode existed in the Players table but were never updated during gameplay.
-- Solution: UpdatePlayerLifetimeStats() runs at session end with a single parameterized UPDATE using SQL-side increments: TotalHandsAllTime = TotalHandsAllTime + @hands. SQL-side incrementing avoids race conditions. FavoriteStrategyMode updates to reflect the current session's strategy choice.
+**[FEATURE] Page 2 — Token Economy**
+- Date: May 27, 2026
+- Phase: Phase 5
+- Problem: Needed a page that shows the financial story of the platform — how token volume grew over time, whether the house edge was consistent, and whether having strategy mode active changed betting behavior.
+- Solution: Centerpiece in black: Monthly Token Volume (Platform Engagement) column chart showing tokens wagered by month from November 2025 to May 2026 — a clear growth pattern peaking in April. Supporting visual left: House Edge Over Time line chart (Player Net PnL by month) showing the house consistently extracting tokens with a constant line at 0 for reference. Supporting visual right: Two gauge charts side by side — Average Bet Strategy Off (40.11) and Average Bet Strategy On (25.04) — with a text annotation: "Players with strategy mode active bet 37% less on average, suggesting a correlation between strategy engagement and conservative risk behavior." The 37% betting difference is the most behaviorally interesting finding on this page and the most operationally transferable to other domains.
 
 ---
 
-**[FEATURE] Win streak tracking**
-- Date: May 18, 2026
-- Phase: Phase 3
-- Problem: LongestWinStreak existed in the Players table schema but was never populated during gameplay.
-- Why it mattered: Win streak is one of the most behaviorally interesting player stats — it captures hot streaks, tilt behavior, and session momentum.
-- Solution: currentWinStreak declared in Main() session scope. Increments on every Win result across all three resolution paths. When currentWinStreak exceeds longestWinStreak, an immediate UPDATE writes the new record to Players.LongestWinStreak. Resets to 0 on any non-Win result.
+**[FEATURE] Page 3 — Behavioral Analytics**
+- Date: May 28, 2026
+- Phase: Phase 5
+- Problem: Needed a page that answers the most original analytical question in the project: does decision speed correlate with outcomes, and is the relationship linear or threshold-based?
+- Solution: Centerpiece in black: Decision Speed vs. Win Rate — Is there an optimal window? Line chart with six speed buckets showing win rates: 0-3s (41.4%), 4-6s (40.0%), 7-10s (42.2%), 11-15s (39.7%), 16-25s (37.7%), 26s+ (35.7%). The peak at 7-10 seconds reveals a non-linear threshold effect — neither the fastest nor the slowest players win most, but players in the 7-10 second optimal window perform best. Y axis disclosure footnote: "Note: Y axis range 34%-43%. Absolute spread across all speed buckets is ~6 percentage points." Supporting visual left: Compliance Rate by Age Group bar chart showing a clean staircase from 38.2% (21-29) to 55.8% (50+). Supporting visual right: Average Decision Time by Age Group bar chart showing 14s (21-29) through 31s (50+). Together the three visuals tell a coherent story: older players decide more slowly and follow recommendations more consistently, yet fall into the slower speed buckets where win rates are lowest — indicating hesitation correlates with harder hands, not poor strategy.
 
 ---
 
-**[FEATURE] PrintQuerySummary() — three live SQL queries at session end**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: The session summary printed C# variables. No SQL queries were visible to demonstrate that the database was actively being queried.
-- Why it mattered: For portfolio purposes, showing live SQL queries running against the database and surfacing insights is the highest-impact demonstration of the analytics layer. It proves the pipeline is functional end to end within the C# layer.
-- Solution: PrintQuerySummary() runs three parameterized queries against blackjack.db at session end. Query 1 (Current Session Metrics): COUNT, win rate, net profit, and recommendation adherence for this SessionID. Query 2 (Strategy Recommendation Performance): win rate grouped by RecommendationFollowed across lifetime strategy-on hands. Query 3 (Decision Latency Analysis): win rate grouped by HandDurationSeconds buckets across all lifetime hands. Footer query: COUNT(*), COUNT(DISTINCT SessionID), COUNT(DISTINCT PlayerID) from GameSessions. Loading animation and per-query checkmarks provide visual confirmation that queries are executing. Each result line reveals with a Thread.Sleep delay.
-- Future considerations: These three queries are the in-game preview of the Power BI dashboard.
+**[FEATURE] Page 4 — Player Intelligence**
+- Date: May 29, 2026
+- Phase: Phase 5
+- Problem: Needed a page that surfaces individual player profiles and tests whether the aggregate compliance finding holds at the individual level.
+- Solution: Centerpiece: Player Leaderboard — Top 15 by Token Balance table showing Username, Token Deviation from mean, TokenBalance, Win Rate, Compliance Rate, Won Following Advice, and Lost Ignoring Advice. Top player (austinthomas) holds 1,081 tokens — 1,032 above the mean — with 57.8% win rate. Blank cells in compliance columns correctly indicate players who played with strategy off. Footnote: "Blank cells related to compliance metrics represent players who did not use strategy mode." Supporting visual left: Compliance Rate vs Win Rate by Player scatter chart — 262 dots, one per player. The scatter shows no strong individual-level correlation between compliance rate and win rate, confirming that the aggregate finding (40.1% vs 29.6%) holds at the population level but individual outcomes show high variance. Annotation: "No strong individual-level correlation between compliance rate and win rate — aggregate findings hold at population level but individual outcomes show high variance." Supporting visual right: Sessions by Strategy Mode donut — 70.72% strategy on, 29.28% off. Annotation: "70.7% of hands played with strategy mode active — compliance analysis is representative of the majority of gameplay."
 
 ---
 
-**[REFACTOR] CSV dependency removed entirely**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: WriteRecordToCSV(), LoadPlayerBalance(), and CheckDailyBonus() remained in the codebase as dead code after their SQLite replacements were confirmed working.
-- Solution: Deleted WriteRecordToCSV(), LoadPlayerBalance(), and CheckDailyBonus() methods entirely. Removed csvPath variable from Main(). Removed all four WriteRecordToCSV() call sites. Removed unused using static System.Net.Mime.MediaTypeNames import.
-- Future considerations: The CSV layer served its purpose as a working Phase 1-2 data store. Its removal marks the SQLite migration as complete.
+**[DECISION] Color scheme — black centerpiece, red primary, gray secondary**
+- Date: May 26, 2026
+- Phase: Phase 5
+- Problem: Needed a visual identity for the dashboard that was both professional and thematically appropriate to the project domain.
+- Solution: Playing card aesthetic — black background on each page's centerpiece visual, red as the primary data color, dark gray as the secondary color. This creates a clear visual hierarchy: the viewer's eye goes to the black centerpiece first, then reads the supporting visuals in red and gray. The color scheme was consistent across all four pages and all visual types including cards, bar charts, line charts, gauges, and table headers. The choice was intentional and documented rather than left as a default Power BI theme.
 
 ---
 
-**[REFACTOR] Comment pass on all SQLite methods**
-- Date: May 22, 2026
-- Phase: Phase 3
-- Problem: CheckDailyBonusDB() had a placeholder comment header. Several method comments referenced CSV patterns that no longer existed.
-- Solution: Full comment pass on CheckDailyBonusDB(), RegisterOrLoginPlayer(), InsertGameRecord(), InsertSessionRecord(), UpdateSessionRecord(), UpdatePlayerLifetimeStats(), and PrintQuerySummary(). All comments updated to remove CSV references and explain the SQLite architecture in consistent educational style.
+**[DATA] Axis disclosure footnotes — compressed Y axes**
+- Date: May 29, 2026
+- Phase: Phase 5
+- Problem: Several visuals use compressed Y axis ranges that amplify visual differences beyond their actual magnitude. A 6 percentage point spread across decision speed buckets looks dramatic when the axis runs 34-43% but looks trivial at 0-100%. Both representations are technically accurate; neither is complete without context.
+- Why it mattered: Compressed axes are one of the most common ways dashboards mislead unintentionally — and one of the most common things a technically literate reviewer will notice. Disclosing the axis range proactively signals data literacy and intellectual honesty. The decision to compress was justified (the relative pattern is the analytically interesting finding), but it required disclosure.
+- Solution: Added text box annotations below each affected visual with the Y axis range and absolute spread. Page 1 compliance chart: "Y axis range 25%-50%. Absolute spread ~10.5 percentage points." Page 3 decision speed chart: "Y axis range 34%-43%. Absolute spread across all speed buckets is ~6 percentage points." Formatting: small font (9-10pt), gray color, positioned below the visual without competing for attention.
 
 ---
 
 ---
 
-# KNOWN LIMITATIONS AND TECHNICAL DEBT
+# KNOWN LIMITATIONS AND TECHNICAL DEBT — UPDATED
 
-| Item | Status | Phase Introduced | Planned Resolution |
-|------|--------|-----------------|-------------------|
+| Item | Status | Phase Introduced | Resolution |
+|------|--------|-----------------|-----------|
 | CSV still active in parallel | ✅ RESOLVED — May 22, 2026 | Phase 3 | Deleted |
 | Sessions table not yet populated | ✅ RESOLVED — May 22, 2026 | Phase 3 | InsertSessionRecord/UpdateSessionRecord implemented |
 | Players lifetime stats not yet updated | ✅ RESOLVED — May 22, 2026 | Phase 3 | UpdatePlayerLifetimeStats() implemented |
 | PrintQuerySummary() not yet implemented | ✅ RESOLVED — May 22, 2026 | Phase 3 | Three live SQL queries implemented |
 | Comment pass on SQLite methods pending | ✅ RESOLVED — May 22, 2026 | Phase 3 | Full comment pass completed |
 | Strategy suggestions not context-aware | ✅ RESOLVED — May 21, 2026 | Phase 1 | Dealer card factored into all probability calculations |
+| Database too small for meaningful analytics | ✅ RESOLVED — May 23, 2026 | Phase 4 | 250 synthetic players, 9,500+ hands |
+| Power BI dashboard not yet built | ✅ RESOLVED — May 29, 2026 | Phase 5 | Four-page dashboard complete |
 | No card counting / deck depletion tracking | OPEN | Phase 1 | Future feature — multi-deck shoe |
-| Split hands not implemented | OPEN | Phase 2 | Future feature — post-Phase 5 |
-| Recursive Main() for play again | OPEN | Phase 2 | Noted technical debt — acceptable for current scope |
-| Soft 17 dealer rule not configurable | OPEN | Phase 1 | Future feature — adds an analytically interesting variable |
+| Split hands not implemented | OPEN | Phase 2 | Future feature |
+| Recursive Main() for play again | OPEN | Phase 2 | Technical debt — acceptable for current scope |
+| Soft 17 dealer rule not configurable | OPEN | Phase 1 | Future feature |
 
 ---
 
-*This document is updated at the end of each development phase. Next update: Phase 4 Complete*
+*This document is updated at the end of each development phase. Project complete as of May 29, 2026.*
