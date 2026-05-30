@@ -2,13 +2,13 @@
 ## BlackjackAnalytics — Development Phases and Milestones
 **Author:** Alex Thomas  
 **Repository:** https://github.com/AlexChaseThomas/BlackjackAnalytics  
-**Last updated:** May 23, 2026
+**Last updated:** May 29, 2026
 
 ---
 
 ## How to read this document
 
-This roadmap tracks every development phase from initial build through portfolio completion. It is a living document updated at the end of each phase or major milestone.
+This roadmap tracks every development phase from initial build through portfolio completion.
 
 Status indicators:
 - ✅ Complete
@@ -48,11 +48,6 @@ Build a stable, realistic Blackjack game that generates clean, structured analyt
 - [x] Session statistics summary at end of session
 - [x] GameStats class tracking wins, losses, ties, busts, strategy overrides
 
-### Key decisions made
-- Used C# model classes (POCOs) to represent data — PlayerInfo, SessionRecord, GameStats
-- CSV schema designed to match planned SQL table structure from the start
-- Educational comments preserved throughout for learning and portfolio value
-
 ---
 
 ## ✅ PHASE 2 — Code Cleanup, Identity System, Blackjack Realism
@@ -67,7 +62,7 @@ Clean up the codebase, remove PII, implement proper casino blackjack mechanics, 
 - [x] Dictionary replaces all three if/else card value chains
 - [x] DetermineWinner() method extracted from Main()
 - [x] Password gate removed
-- [x] Real names replaced with username system (3-20 characters, stored lowercase)
+- [x] Real names replaced with username system (3–20 characters, stored lowercase)
 - [x] Full DOB collected for verification only, immediately discarded, age integer stored
 - [x] Proper casino deal order — player gets two cards, dealer gets one visible and one hole card
 - [x] Hole card hidden during player turn, revealed before dealer draws
@@ -76,12 +71,6 @@ Clean up the codebase, remove PII, implement proper casino blackjack mechanics, 
 - [x] Opening hand strategy warning for totals of 17 or higher
 - [x] Play again blended with betting prompt
 - [x] End of session menu with Play Again and Exit options
-
-### Key decisions made
-- No passwords collected — username alone identifies the player
-- DOB verified then discarded — only calculated age integer persists in data
-- numberOfDraws counts only additional draws beyond opening two cards
-- Recursive Main() used for play again — noted as technical debt, acceptable for current scope
 
 ---
 
@@ -112,113 +101,118 @@ Complete game engine realism, fix all known data integrity and gameplay bugs, re
 - [x] warningActive flag introduced to track warning state between keypresses
 - [x] Exit bug fixed — typing exit at bet prompt no longer deals a phantom hand
 - [x] Hands played count fixed — stats.TotalGames no longer increments on exit
-- [x] Daily bonus LastSeen race condition fixed — RegisterOrLoginPlayer() no longer overwrites LastSeen before CheckDailyBonusDB() reads it
+- [x] Daily bonus LastSeen race condition fixed
 - [x] Username validation rejects spaces
 
 **UI/UX**
 - [x] Dealer natural 21 ends hand immediately before player draws
-- [x] Dealer reveal animation — "Dealer revealing..." disappears, full dealer hand appears in its place
-- [x] Thread.Sleep(1000) pacing between each dealer card draw
-- [x] Soft Ace display — "(Ace counting as 1)" shown in DarkYellow when Ace drops from 11 to 1
-- [x] Bust message shown when player goes over 21
-- [x] Visual pipe separator between cards in hand display
-- [x] Session summary bust counts added (PlayerBusts and DealerBusts)
-- [x] Input buffer flush fix — buffered keypresses from dealer animation no longer fire on next hand
+- [x] Dealer reveal animation with pacing and cursor overwrite
+- [x] Soft Ace display — "(Ace counting as 1)" shown when Ace drops from 11 to 1
+- [x] Bust message, visual hand separator, session summary bust counts, input buffer flush fix
 - [x] Prompt text consistency — all continue/exit prompts unified
 - [x] Strategy mode selection redesigned with numbered options and color coding
 - [x] Session summary reveal animation — 150ms per line
+- [x] Redundant exit prompt removed
 
 **SQLite integration**
-- [x] System.Data.SQLite.Core NuGet installed
-- [x] Three-table normalized schema — Players, Sessions, GameSessions
-- [x] Players table — PlayerID, Username, PlayerAge, FirstSeen, LastSeen, TokenBalance, TotalHandsAllTime, TotalWinsAllTime, FavoriteStrategyMode, LongestWinStreak
-- [x] Sessions table — one row per session, StartBalance, EndBalance, NetProfit, TotalHands
-- [x] GameSessions table — 29-column schema, one row per hand
-- [x] InitializeDatabase() — creates all three tables with CREATE TABLE IF NOT EXISTS
-- [x] RegisterOrLoginPlayer() — replaces LoadPlayerBalance(), returns (balance, playerID, longestWinStreak) tuple
-- [x] InsertGameRecord() — replaces WriteRecordToCSV(), inserts hand and updates Players.TokenBalance
-- [x] CheckDailyBonusDB() — reads Players.LastSeen instead of CSV, owns all LastSeen updates
-- [x] InsertSessionRecord() — writes session row at session start
-- [x] UpdateSessionRecord() — fills in EndTime, TotalHands, EndBalance, NetProfit at session end
-- [x] sessionStartBalance snapshot taken after daily bonus for accurate NetProfit calculation
-- [x] New analytics fields populating — DealerVisibleCard, DealerVisibleValue, OpeningPlayerTotal, OpeningDealerTotal, PlayerHandWasSoft, HandDurationSeconds, OSVersion
-- [x] Win streak tracking — currentWinStreak updates Players.LongestWinStreak in real time across all resolution paths
-- [x] UpdatePlayerLifetimeStats() — SQL-side increments for TotalHandsAllTime, TotalWinsAllTime; FavoriteStrategyMode updated at session end
+- [x] Three-table normalized schema — Players, Sessions, GameSessions (29 columns)
+- [x] RegisterOrLoginPlayer(), InsertGameRecord(), CheckDailyBonusDB()
+- [x] InsertSessionRecord() and UpdateSessionRecord()
+- [x] UpdatePlayerLifetimeStats() — SQL-side increments for TotalHandsAllTime, TotalWinsAllTime
+- [x] Win streak tracking — updates Players.LongestWinStreak in real time
 
 **Strategy recommendation engine**
-- [x] GetStrategyRecommendation() — core basic strategy ruleset using dealerVisibleValue as primary variable
-- [x] CalculateDealerWinProbability() — dynamic runtime calculation using weighted probability tree traversal
-- [x] SimulateDealerDraw() — recursive helper, ref parameters accumulate outcomes across full probability tree
-- [x] CalculateDealerBustProbability() and SimulateDealerBust() — for weak dealer card STAND framing
-- [x] RecommendedAction, RecommendationFollowed, RiskLevel, DealerWinProbability added to schema (25 → 29 columns)
-- [x] PrintStrategyRecommendation() — two-tier display, color-coded controls (green = recommended, red = override, cyan = quit)
-- [x] Conditional framing — dealer 4-6 uses bust probability, dealer 2-3 and 7-Ace uses player win probability
+- [x] GetStrategyRecommendation() — context-aware, uses dealerVisibleValue as primary variable
+- [x] CalculateDealerWinProbability() — weighted probability tree traversal at runtime
+- [x] CalculateDealerBustProbability() — conditional framing for weak dealer cards
+- [x] PrintStrategyRecommendation() — two-tier display, color-coded controls
+- [x] RecommendedAction, RecommendationFollowed, RiskLevel, DealerWinProbability in schema
 
 **Live analytics and cleanup**
-- [x] PrintQuerySummary() — three live SQL queries at session end with reveal animation and footer
-- [x] CSV dependency removed entirely — WriteRecordToCSV(), LoadPlayerBalance(), CheckDailyBonus() deleted
+- [x] PrintQuerySummary() — three live SQL queries at session end
+- [x] CSV dependency removed entirely
 - [x] Comment pass on all SQLite methods
-- [x] File header updated — PURPOSE, ARCHITECTURE, DATABASE TABLES, KEY DESIGN DECISIONS documented
+- [x] File header updated — PURPOSE, ARCHITECTURE, DATABASE TABLES, KEY DESIGN DECISIONS
 
 ---
 
-## 🔄 PHASE 4 — Python Synthetic Data Generation
-**Status:** Active  
-**Dependency:** Phase 3 complete ✅
+## ✅ PHASE 4 — Python Synthetic Data Generation
+**Status:** Complete  
+**Committed:** May 23, 2026
 
 ### Goal
-Write Python scripts that connect to the SQLite database and populate it with realistic synthetic player data at scale. The database needs hundreds of rows across multiple players and sessions for the analytics queries and Power BI dashboard to produce statistically meaningful output.
+Populate the database with realistic synthetic player data at the scale needed for statistically meaningful analytics and dashboard visualization.
 
 ### Why synthetic data
-The game is functionally an arcade machine — it is designed to collect data from many players over time. Without deployment to a web platform, real play sessions take too long to accumulate at the scale needed. Synthetic data generation is standard practice for analytics demos and portfolio projects. The Python generator also demonstrates pandas and SQLite integration as standalone skills within the pipeline.
+The game is functionally an arcade machine: it is designed to collect data from many players over time. Without deployment to a web platform, real play sessions take too long to accumulate at the scale needed. Synthetic data generation is standard practice for analytics demos and portfolio projects. The generator is documented openly and uses real game logic, meaning all outcomes are derived from actual card probabilities.
 
-### Milestones
-- [ ] Write generate_synthetic_data.py
-  - [ ] Multiple player profiles with varying strategy compliance rates
-  - [ ] Realistic HandDurationSeconds distributions (fast/moderate/slow players)
-  - [ ] Realistic betting behavior patterns
-  - [ ] Varied session lengths
-  - [ ] Populate 500-1000 hands across 10+ players and 50+ sessions
-- [ ] Verify data in DB Browser — confirm all 29 columns populating correctly
-- [ ] Verify PrintQuerySummary() produces meaningful output against synthetic dataset
-- [ ] Write bust_analysis.py — bust rate by opening hand total
-- [ ] Write win_rate_trends.py — win rate over sessions
-- [ ] Write strategy_impact.py — win rate followed vs ignored recommendations
-- [ ] Write token_flow.py — token balance trends per player
-- [ ] Export all charts as .png into /analysis/charts/
-- [ ] Commit: Phase 4 complete
+### Completed milestones
+- [x] generate_synthetic_data.py created in /analysis folder
+- [x] Six behavioral archetypes — disciplined, impulsive, deliberate, casual, risk_taker, novice
+- [x] Individual player variation added on top of archetype baselines
+- [x] Weighted probability lookup table built with lru_cache memoization — mirrors C# probability model
+- [x] Real game logic simulation — cards dealt, hands play out, outcomes determined by actual probability
+- [x] 250 synthetic players generated across all archetypes
+- [x] Age distribution 21–68 years — enables age vs behavior analysis
+- [x] All 29 GameSessions columns populated correctly
+- [x] Players, Sessions, and GameSessions tables all populated
+- [x] Final database: 262 players (250 synthetic + 12 real), 1,377 sessions, 9,511 hands
+- [x] PrintQuerySummary() verified — meaningful output confirmed against full dataset
+- [x] Demo video recorded and committed
+- [x] Phase 4 complete commit — May 23, 2026
 
 ---
 
-## ⬜ PHASE 5 — Power BI Dashboard
-**Status:** Planned  
-**Dependency:** Phase 4 complete
+## ✅ PHASE 5 — Power BI Dashboard
+**Status:** Complete  
+**Committed:** May 29, 2026
 
 ### Goal
 Build a four-page interactive Power BI dashboard that connects directly to the SQLite database and visualizes the full behavioral analytics dataset.
 
-### Milestones
-- [ ] Connect Power BI Desktop to blackjack.db
-- [ ] Build Page 1 — Session Overview (KPIs, win/loss/tie breakdown, sessions over time)
-- [ ] Build Page 2 — Hand Analysis (player total distribution, bust rate trends, average totals by result)
-- [ ] Build Page 3 — Strategy Analysis (win rate followed vs ignored, override frequency, recommendation accuracy)
-- [ ] Build Page 4 — Token Economy (balance trends, bet sizing patterns, session profitability)
-- [ ] Export dashboard screenshots as .png
-- [ ] Add screenshots to /powerbi/screenshots/ and README.md
-- [ ] Commit .pbix file and screenshots
-- [ ] Commit: Phase 5 complete
+### Completed milestones
+- [x] SQLite3 ODBC driver installed and configured
+- [x] Power BI Desktop connected to blackjack.db via ODBC
+- [x] All three tables loaded — Players, Sessions, GameSessions
+- [x] Table relationships confirmed — Players → Sessions (1:many), Players → GameSessions (1:many)
+- [x] LoginTime, StartTime, EndTime converted from TEXT to DateTime in Power Query
+- [x] DAX measures created — Win Rate, Win Rate Followed, Win Rate Ignored, Net Token Flow, Player Net PnL, Total Tokens Wagered, Avg Bet Strategy On/Off, Avg Decision Time, Compliance Rate, Player Win Rate, Hands Won Following, Hands Lost Ignoring, Token Deviation
+- [x] Calculated columns — SpeedBucket, SpeedBucketSort, AgeBracket, AgeBracketSort, MonthYear
+- [x] Page 1 — Overview: KPI cards, compliance bar chart (40.1% vs 29.6%), win/loss/tie donut, hands by result
+- [x] Page 2 — Token Economy: monthly volume column chart, house edge line chart, avg bet gauges (25.04 on vs 40.11 off)
+- [x] Page 3 — Behavioral Analytics: decision speed vs win rate line chart (peak at 7-10s), age vs decision time, compliance rate by age group
+- [x] Page 4 — Player Intelligence: top 15 leaderboard, compliance vs win rate scatter, strategy mode distribution
+- [x] Color scheme applied — black centerpiece, red primary, gray secondary (playing card aesthetic)
+- [x] Axis disclosure footnotes on compressed Y axes
+- [x] Insight annotations added to all four pages
+- [x] Dashboard screenshots committed to /screenshots/
+- [x] BlackjackAnalytics.pbix committed to repository
+- [x] Phase 5 complete commit — May 29, 2026
+
+---
+
+## ✅ PORTFOLIO POLISH
+**Status:** Complete
+
+### Completed milestones
+- [x] README.md updated to reflect all five phases complete
+- [x] CHANGELOG.md updated through Phase 5
+- [x] ROADMAP.md updated through Phase 5
+- [x] Demo video recorded and published (unlisted): https://youtu.be/IBBQVjk49mE
+- [x] Demo video linked in README with thumbnail
+- [x] DB Browser compliance query screenshot committed
+- [x] All gameplay screenshots committed to /screenshots/
+- [x] Dashboard preview screenshots committed to /screenshots/
 
 ---
 
 ## 💡 FUTURE IDEAS (not yet scoped)
 
-- **Blazor WebAssembly front end** — game playable in browser, increases recruiter accessibility significantly, enables real multi-user data collection
-- **Split hands mechanic** — adds another betting behavior data point, makes game more realistic
+- **Blazor WebAssembly front end** — game playable in browser, enables real multi-user data collection
+- **Split hands mechanic** — adds another betting behavior data point
 - **Card counting detection** — track running count, analyze whether count correlates with player decisions
-- **Multi-game casino platform** — shared core library, add Poker, Craps, Roulette as separate games
-- **Leaderboard** — SELECT + ORDER BY on TokensAfter, simple SQL feature, good dashboard visual
-- **Achievement system** — query-based, no schema change needed
-- **Soft 17 dealer rule option** — some casinos hit on soft 17, configurable option, interesting analytics variable
+- **Multi-game casino platform** — shared core library, Poker, Craps, Roulette as separate games
+- **Soft 17 dealer rule option** — configurable, adds an analytically interesting variable
 - **Azure or cloud deployment** — host database in the cloud, enable real multi-user capability
 
 ---
@@ -230,9 +224,9 @@ Build a four-page interactive Power BI dashboard that connects directly to the S
 | Phase 1 — Game Engine | ✅ Complete | May 7, 2026 |
 | Phase 2 — Code Cleanup + Realism | ✅ Complete | May 11, 2026 |
 | Phase 3 — SQLite + Analytics Engine | ✅ Complete | May 22, 2026 |
-| Phase 4 — Python Synthetic Data | 🔄 Active | — |
-| Phase 5 — Power BI Dashboard | ⬜ Planned | — |
+| Phase 4 — Python Synthetic Data | ✅ Complete | May 23, 2026 |
+| Phase 5 — Power BI Dashboard | ✅ Complete | May 29, 2026 |
 
 ---
 
-*This document is updated at the end of each development phase. Next update: Phase 4 Complete*
+*Project complete. All five phases delivered.*
